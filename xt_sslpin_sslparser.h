@@ -17,9 +17,11 @@
 #ifndef _LINUX_NETFILTER_XT_SSLPIN_SSLPARSER_H
 #define _LINUX_NETFILTER_XT_SSLPIN_SSLPARSER_H
 
+#include <crypto/ahash.h>
+#include <linux/err.h>
+#include <linux/scatterlist.h>
 
 #include "ssl_tls.h"
-
 
 typedef enum {
     SSLPARSER_RES_NONE,
@@ -36,7 +38,6 @@ typedef enum {
 #define SSLPARSER_STATE_INVALID                     (__u8)-1
 #define SSLPARSER_STATE_FINISHED                    (__u8)-2
 
-
 struct sslparser_ctx {
     /* Parser state variables */
     __u8        state;
@@ -49,23 +50,17 @@ struct sslparser_ctx {
     __u8        msg_type;
     __u16       record_remain;
     __u16       msg_remain;
-    __u16       firstcert_remain;
+    __u16       cert_remain;
+
+    /* Hashing state variables */
+    struct {
+        struct shash_desc * desc;
+        __u8 *              val;
+    } hash;
+    
 
     /* Parser results */
     struct {
-        /* Common Name (utf-8 + zero) */
-        __u16                           cn_len;
-        char                            cn[SSLPARSER_MAX_COMMON_NAME_LEN + 1];
-
-        /* Public Key */
-        __u16                           pubkey_len;
-        __u8                            pubkey[SSLPARSER_MAX_PUBLIC_KEY_BYTELEN];
-
-        /* Public Key Algorithm oid with length in [0] */
-        __u8                            pubkey_alg_oid[SSLPIN_MAX_PUBLIC_KEY_ALG_OID_BYTELEN];
-
-        /* Public Key Algorithm - resolved algorithm name or NULL */
-        const struct sslpin_pubkeyalg   *pubkey_alg;
     } results;
 };
 
@@ -155,21 +150,7 @@ struct sslparser_ctx {
     go_state(new_state, label);
 
 
-static const struct sslpin_pubkeyalg *sslparser_lookup_pubkey_alg_oid(struct sslparser_ctx *state) {
-    const struct sslpin_pubkeyalg *alg_end = pubkeyalgs + SSLPIN_PUBLIC_KEY_ALGS_CNT;
-    const struct sslpin_pubkeyalg *alg;
-    for (alg = pubkeyalgs; alg < alg_end; alg++) {
-        if (l(alg->oid_asn1[0] == state->results.pubkey_alg_oid[0])) {
-            if (l(!memcmp(alg->oid_asn1 + 1, state->results.pubkey_alg_oid + 1, alg->oid_asn1[0]))) {
-                return alg;
-            }
-        }
-    }
-    return NULL;
-}
-
-
-static sslparser_res_t sslparser(struct sslparser_ctx * const state, const __u8 *data, const __u32 data_len)
+static sslparser_res_t sslparser(struct sslparser_ctx * const state, struct * const crypto_shash, const __u8 *data, const __u32 data_len)
 {
     const __u8  version_bytes[]         = { 0xa0, 0x03, 0x02, 0x01, 0x02 };
     const __u8  cert_skiplist_types[]   = { 0x02, 0x30, 0x30, 0x30 };
@@ -275,7 +256,6 @@ state5_message_begin:
 
             step_state_to(20, state20_skip_message);
 
-
 state20_skip_message:
         /* skip over message, then go to either state5_message_begin or state0_record_begin */
         case 20:
@@ -293,12 +273,11 @@ state20_skip_message:
             /* no more messages in record */
             go_state(0, state0_record_begin);
 
-
 state40_parse_certificate_message:
         /* Certificate message parsing */
         case 40:
             if (ul(state->msg_remain < 32)) {
-                invalid("Certificate message len == %d\n", state->msg_remain);
+                invalid("certificate message len == %d\n", state->msg_remain);
             }
             if (ul(state->cert_msg_seen)) {
                 invalid("more than one Certificate message\n");
@@ -314,566 +293,85 @@ state40_parse_certificate_message:
             state->a |= *data;
             state->msg_remain -= 3;
             if (ul(state->a != state->msg_remain)) {
-                invalid("certificates data length %d vs. msg_remain %d\n", state->a, state->msg_remain - 3);
+                invalid("certificates data length %d != msg_remain %d\n", state->a, state->msg_remain);
             }
 
             state->record_remain = state_remain() - state->msg_remain;
             bind_state_remain(state->msg_remain + 1);
-            step_state();
 
-        /* parse first certificate length (3 bytes) */
-        case 43:
-            state->firstcert_remain = *data << 16;
-            step_state();
-        case 44:
-            state->firstcert_remain |= *data << 8;
-            step_state();
-        case 45:
-            state->firstcert_remain |= *data;
-            if (ul((state->firstcert_remain > state_remain() - 1) || (state->firstcert_remain < 32))) {
-                invalid("first certificate data length: %d\n", state->firstcert_remain);
-            }
+            step_state_to(50, state_50_finger_print_certificate);
 
-            state->msg_remain = state_remain() - state->firstcert_remain;
-            bind_state_remain(state->firstcert_remain + 1);
-            step_state();
-
-        /* parse ASN.1: |Certificate ::= SEQUENCE {|  bytes: 0x30 0x82 len len  - expect 2-byte len */
-        case 46:
-            if (*data != 0x30) {
-                invalid("invalid Certificate SEQUENCE type tag\n");
-            }
-            step_state();
-        case 47:
-            if (*data != 0x82) {
-                invalid("invalid Certificate SEQUENCE len byte count\n");
-            }
-            step_state();
-        case 48:
-            state->a = *data << 8;
-            step_state();
-        case 49:
-            state->a |= *data;
-            if (ul(state->a != state_remain() - 1)) {
-                invalid("invalid Certificate SEQUENCE len\n");
-            }
-            step_state();
-
-        /* parse ASN.1: |TBSCertificate ::= SEQUENCE {|  bytes: 0x30 0x82 len len  - expect 2-byte len */
+state50_finger_print_certificate:
+        /* parse certificate length (3 bytes) */
         case 50:
-            if (*data != 0x30) {
-                invalid("invalid TBSCertificate SEQUENCE type tag\n");
-            }
+            state->cert_remain = *data << 16;
             step_state();
         case 51:
-            if (*data != 0x82) {
-                invalid("invalid TBSCertificate SEQUENCE len byte count\n");
-            }
+            state->cert_remain |= *data << 8;
             step_state();
         case 52:
-            state->a = *data << 8;
+            state->cert_remain |= *data;
+            if (ul((state->cert_remain > state_remain() - 1))) {
+                invalid("certificate data length: %d\n", state->cert_remain);
+            }
+
+            if(ul(crypto_shash_init(state->hash.desc) < 0)){
+                invalid("faild (re-) iniaializing hash description\n");
+            }
+
             step_state();
         case 53:
-            state->a |= *data;
-            if (ul(state->a > state_remain())) {
-                invalid("invalid TBSCertificate SEQUENCE len\n");
-            }
-            step_state();
-
-        /* parse ASN.1: |version   [0] Version DEFAULT v1|  hex: a0 03 02 01 02  - expect v3 (last byte 2) */
-        case 54:
-            state->a = 0;
-            statev++;
-
-state55_check_certificate_version:
-        case 55:
-            if (ul(*data != version_bytes[state->a])) {
-                invalid("invalid TBSCertificate.Version\n");
-            }
-            if (l(++state->a < sizeof(version_bytes))) {
-                step_state_to(55, state55_check_certificate_version);
-            }
-            step_state();
-
-        /* skip over certificate fields: serialNumber, signature, issuer and validity */
-        case 56:
-            state->a = 0;
-            statev++;
-
-state57_skip_certificate_fields:
-        /* certificate field skip: check field type */
-        case 57:
-            if (ul(*data != cert_skiplist_types[state->a])) {
-                invalid("TBSCertificate field %d has invalid type\n", state->a + 1);
-            }
-            step_state();
-
-        /* certificate field skip: get field length */
-        case 58:
-            state->b = *data;
-
-            /* single-byte length */
-            if (l(state->b < 0x80)) {
-                /* state->b holds actual single-byte length */
-                step_state_to(60, state60_check_certificate_multibyte_fieldlen);
-            }
-
-            /* multi-byte length */
-            state->c = state->b & 0x7f;
-            if (ul((!state->c) || (state->c > 2))) {
-                invalid("TBSCertificate field %d has invalid length\n", state->a);
-            }
-
-            state->b = 0;
-            step_state();
-
-        /* certificate field skip: get multi-byte field length */
-state59_get_certificate_multibyte_fieldlen:
-        case 59:
-            state->b = (state->b << 8) | *data;
-            if (l(--state->c)) {
-                step_state_to(59, state59_get_certificate_multibyte_fieldlen);
-            }
-            step_state();
-
-state60_check_certificate_multibyte_fieldlen:
-        /* certificate field skip: validate field length */
-        case 60:
-            /* state->b: field length */
-            if (ul(state->b > 16384)) {
-                invalid("TBSCertificate field %d has invalid length\n", state->a + 1);
-            }
-            statev++;
-
-        /* certificate field skip: skip over field */
-        case 61:
-            if (ul(data_remain() <= state->b)) {
-                state->b -= data_remain();
+            if (ul(data_remain() < state->cert_remain)) {
+                state->cert_remain -= data_remain();
                 state->state_remain = state_remain() - data_remain();
-                need_more_data();
-            }
-            data += state->b;
-            if (l(++state->a < sizeof(cert_skiplist_types))) {
-                go_state(57, state57_skip_certificate_fields);
-            }
-            go_state(80, state80_find_common_name);
 
-
-state80_find_common_name:
-        /* parse ASN.1: |RDNSequence ::= SEQUENCE OF RelativeDistinguishedName|  - find id-at-commonName utf-8 string */
-        case 80:
-            if (ul(*data != 0x30)) {
-                invalid("subject field has invalid type tag\n");
-            }
-            step_state();
-
-        /* RDNSequence: get outer sequence length (multi-byte accepted) */
-        case 81:
-            state->b = *data;
-
-            /* single-byte length */
-            if (l(state->b < 0x80)) {
-                /* state->b holds actual single-byte length */
-                step_state_to(90, state90_check_rdnsequence_len);
-            }
-
-            /* multi-byte length */
-            state->c = state->b & 0x7f;
-            if (ul((!state->c) || (state->c > 2))) {
-                invalid("subject field has invalid length\n");
-            }
-
-            state->b = 0;
-            step_state();
-
-        /* RDNSequence: get outer sequence multi-byte length */
-state82_get_rdnsequence_len:
-        case 82:
-            state->b = (state->b << 8) | *data;
-            if (l(--state->c)) {
-                step_state_to(82, state82_get_rdnsequence_len);
-            }
-            step_state_to(90, state90_check_rdnsequence_len);
-
-state90_check_rdnsequence_len:
-        /* RDNSequence: validate outer sequence length stored in acc2 */
-        case 90:
-            if (ul((state->b > state_remain()) || (state->b > 512))) {
-                invalid("subject field has invalid length\n");
-            }
-
-            /* state->rdnseq_remain = state->b; */
-            state->firstcert_remain = state_remain() - state->b;
-            bind_state_remain(state->b);
-            statev++;
-
-state91_rdnsequence_item_begin:
-        /* RDNSequence: check if item is id-at-commonName, first check item/entry type tag */
-        case 91:
-            if (ul(*data != 0x31)) {
-                invalid("subject item has invalid type tag\n");
-            }
-            step_state();
-
-        /* RDNSequence: get outer item length (single-byte) */
-        case 92:
-            state->a = *data;
-            if (ul((state->a > state_remain()) || (state->a >= 0x80)) || (state->a < 7)) {
-                invalid("subject item has invalid length\n");
-            }
-            step_state();
-
-        /* RDNSequence: get inner item type tag */
-        case 93:
-            if (ul(*data != 0x30)) {
-                invalid("subject inner item has invalid type tag\n");
-            }
-            step_state();
-
-        /* RDNSequence: check inner item length (single-byte) */
-        case 94:
-            if (ul(*data != state->a - 2)) {
-                invalid("subject inner item has invalid length\n");
-            }
-            step_state();
-
-        /* RDNSequence: check AttributeType prefix byte 06 03 55 04 */
-        case 95:
-            state->b = 0;
-            statev++;
-
-state96_compare_rdnsequence_item_prefix:
-        case 96:
-            if (ul(*data != rdn_attrtype_prefix[state->b])) {
-                state->a += sizeof(rdn_attrtype_prefix) - state->b;
-                step_state_to(100, state100_skip_rdnsequence_item);
-            }
-
-            if (l(++state->b < sizeof(rdn_attrtype_prefix))) {
-                step_state_to(96, state96_compare_rdnsequence_item_prefix);
-            }
-
-            step_state();
-
-        /* RDNSequence: check if last AttributeType byte is 03 (id-at-commonName) */
-        case 97:
-            if (l(*data != 0x03)) {
-                step_state_to(100, state100_skip_rdnsequence_item);
-            }
-            step_state_to(110, state110_copy_common_name);
-
-
-state100_skip_rdnsequence_item:
-        /* RDNSequence: skip item */
-        case 100:
-            state->a -= 7;
-            statev++;
-
-        case 101:
-            if (ul(data_remain() <= state->a)) {
-                state->a -= data_remain();
-                state->state_remain = state_remain() - data_remain();
-                need_more_data();
-            }
-            data += state->a;
-            if (l(state_remain())) {
-                go_state(91, state91_rdnsequence_item_begin);
-            }
-            go_state(115, state115_check_common_name_found);
-
-
-state110_copy_common_name:
-        /* RDNSequence: check id-at-commonName utf8String type tag (0x0c) */
-        case 110:
-            /* 0x0c = utf8String
-             * 0x13 = printableString       a-z, A-Z, ' () +,-.?:/= and SPACE
-             * 0x14 = teletexString         8-bit CCITT and T.101 character sets
-             * todo: teletexString treated as utf-8 for now
-             */
-            if (ul((*data != 0x0c) && (*data != 0x13) && (*data != 0x14))) {
-                invalid("subject id-at-commonName value has invalid type 0x%02x\n", *data);
-            }
-            if (ul(state->results.cn_len)) {
-                invalid("subject contains more than one id-at-commonName\n");
-            }
-            step_state();
-
-        /* RDNSequence: get id-at-commonName utf8String length (accept single-byte length only) */
-        case 111:
-            state->b = state->a - 8 - 1;       /* expected len from outer ASN.1 tag */
-            state->a = *data;
-            if (ul((!state->a) || (state->a != state->b) || (state->a >= 0x80)
-                || (state->a > SSLPARSER_MAX_COMMON_NAME_LEN)))
-            {
-                invalid("subject id-at-commonName value has invalid length\n");
-            }
-
-            state->results.cn_len = state->a;
-            state->a = 0;
-            step_state();
-
-        /* RDNSequence: copy id-at-commonName utf8String into parser context buffer */
-state112_copy_common_name_loop:
-        case 112:
-            if (ul(*data < 32)) {
-                invalid("subject id-at-commonName value contains utf-8 control character %d < 32\n", *data);
-            }
-            state->results.cn[state->a] = *data;
-            if (l(++state->a < state->results.cn_len)) {
-                step_state_to(112, state112_copy_common_name_loop);
-            }
-
-            debug("cn = \"%s\"\n", state->results.cn);
-
-            if (ul(state_remain() > 1)) {
-                step_state_to(91, state91_rdnsequence_item_begin);
-            }
-
-            /* done parsing RDNSequence */
-
-            bind_state_remain(state->firstcert_remain + 1);         /* +1 because data is not yet incremented */
-            step_state_to(115, state115_check_common_name_found);
-
-
-state115_check_common_name_found:
-        /* check that non-empty id-at-commonName utf8String was found in RDNSequence */
-        case 115:
-            if (ul(!state->results.cn_len)) {
-                invalid("non-empty Common Name (id-at-commonName) not found in certificate");
-            }
-            go_state(120, state120_find_publickeyinfo);
-
-
- state120_find_publickeyinfo:
-        /* parse ASN.1: |SubjectPublicKeyInfo ::= SEQUENCE { algorithm .., subjectPublicKey ..}| */
-        case 120:
-            if (ul(*data != 0x30)) {
-                invalid("SubjectPublicKeyInfo has invalid type\n");
-            }
-            step_state();
-
-        /* SubjectPublicKeyInfo: get outer sequence length (multi-byte accepted) */
-        case 121:
-            state->b = *data;;
-
-            /* single-byte length */
-            if (l(state->b < 0x80)) {
-                /* state->b holds actual single-byte length */
-                step_state_to(130, state130_check_subjectpublickeyinfo_len);
-            }
-
-            /* multi-byte length */
-            state->c = state->b & 0x7f;
-            if (ul((!state->c) || (state->c > 2))) {
-                invalid("SubjectPublicKeyInfo field has invalid length\n");
-            }
-
-            state->b = 0;
-            step_state();
-
-        /* SubjectPublicKeyInfo: get outer sequence multi-byte length */
-state122_get_subjectpublickeyinfo_len:
-        case 122:
-            state->b = (state->b << 8) | *data;
-            if (l(--state->c)) {
-                step_state_to(122, state122_get_subjectpublickeyinfo_len);
-            }
-            step_state_to(130, state130_check_subjectpublickeyinfo_len);
-
-
-state130_check_subjectpublickeyinfo_len:
-        /* SubjectPublicKeyInfo: validate outer sequence length stored in acc2 */
-        case 130:
-            if (ul((state->b > state_remain()) || (state->b > 512))) {
-                invalid("SubjectPublicKeyInfo field has invalid length\n");
-            }
-
-            /* state->pk_remain = state->b; */
-            state->firstcert_remain = state_remain() - state->b;
-            bind_state_remain(state->b);
-            go_state(140, state140_parse_publickey_algorithm);
-
-
-state140_parse_publickey_algorithm:
-        /* parse ASN.1: |AlgorithmIdentifier ::= SEQUENCE { algorithm .., parameters .. }| */
-        case 140:
-            if (ul(*data != 0x30)) {
-                invalid("AlgorithmIdentifier has invalid type tag\n");
-            }
-            step_state();
-
-        /* AlgorithmIdentifier: get outer sequence length */
-        case 141:
-            state->b = *data;
-            if (ul((!state->b) || (state->b > state_remain()) || (state->b >= 64))) {
-                invalid("AlgorithmIdentifier has invalid length\n");
-            }
-            step_state();
-
-        /* AlgorithmIdentifier: check algorithm field type tag (0x06 = OBJECT IDENTIFIER) */
-        case 142:
-            if (ul(*data != 0x06)) {
-                invalid("AlgorithmIdentifier.algorithm has invalid type tag\n");
-            }
-            step_state();
-
-        /* AlgorithmIdentifier: get algorithm oid field length */
-        case 143:
-            state->c = *data;
-            if (ul((!state->c) || (state->c > state->b - 1)
-                || (state->c > SSLPARSER_MAX_PUBLIC_KEY_ALG_OID_BYTELEN - 1)))
-            {
-                invalid("AlgorithmIdentifier.algorithm has invalid length\n");
-            }
-
-            state->results.pubkey_alg_oid[0] = *data;
-            state->a = 0;
-
-            step_state();
-
-        /* AlgorithmIdentifier: copy algorithm oid field */
-state144_copy_publickey_algorithm:
-        case 144:
-            state->results.pubkey_alg_oid[state->a + 1] = *data;
-            state->a++;
-            if (l(state->a < state->results.pubkey_alg_oid[0])) {
-                step_state_to(144, state144_copy_publickey_algorithm);
-            }
-
-            /* lookup algorithm for oid */
-            state->results.pubkey_alg = sslparser_lookup_pubkey_alg_oid(state);
-
-            if (ul(state->debug)) {
-                pr_info("xt_sslpin: sslparser: pubkey_alg = { name:%s%s%s, oid_asn1_hex:[",
-                    state->results.pubkey_alg ? "\"" : "",
-                    state->results.pubkey_alg ? state->results.pubkey_alg->name : "",
-                    state->results.pubkey_alg ? "\"" : "");
-
-                if (l(state->results.pubkey_alg_oid[0])) {
-                    printhex(state->results.pubkey_alg_oid + 1, state->results.pubkey_alg_oid[0] - 1);
+                if(ul(crypto_shash_update(state->hash.desc, data, data_remain()) < 0)){
+                    invalid("hash update failed\n");
                 }
-                printk("] }\n");
-            }
-
-            statev++;
-
-        /* AlgorithmIdentifier: skip params
-         * todo: id-ecPublicKey algo: check ECParameters: namedCurve as part of pk+algo matching */
-        case 145:
-            /* AlgorithmIdentifier outer sequence length is in state->b
-             * AlgorithmIdentifier .algorithm oid field length is in state->c */
-            state->b -= state->c + 2;
-            statev++;
-
-        case 146:
-            if (ul(state->b && (data_remain() <= state->b))) {
-                state->b -= data_remain();
-                state->state_remain = state_remain() - data_remain();
-                need_more_data();
-            }
-            data += state->b;
-            step_state_to(150, state150_parse_publickey);
-
-
-state150_parse_publickey:
-        /* parse ASN.1: |subjectPublicKey BIT STRING| */
-        case 150:
-            if (ul(*data != 0x03)) {
-                invalid("subjectPublicKey has invalid type tag\n");
-            }
-            step_state();
-
-        /* subjectPublicKey: get bit string length */
-        case 151:
-            state->b = *data;
-
-            /* single-byte length */
-            if (l(state->b < 0x80)) {
-                /* state->b holds actual single-byte length */
-                step_state_to(160, state160_check_subjectpublickey_len);
-            }
-
-            /* multi-byte length */
-            state->c = state->b & 0x7f;
-            if (ul((!state->c) || (state->c > 2))) {
-                invalid("subjectPublicKey has invalid length\n");
-            }
-
-            state->b = 0;
-            step_state();
-
-        /* subjectPublicKey: get bit string multi-byte length */
-state152_get_subjectpublickey_len:
-        case 152:
-            state->b = (state->b << 8) | *data;
-            if (l(--state->c)) {
-                step_state_to(152, state152_get_subjectpublickey_len);
-            }
-            step_state_to(160, state160_check_subjectpublickey_len);
-
-
-state160_check_subjectpublickey_len:
-        /* subjectPublicKey: validate length stored in b */
-        case 160:
-            if (ul((state->b <= 1) || (state->b != state_remain())
-                || (state->b > SSLPARSER_MAX_PUBLIC_KEY_BYTELEN + 1)))
-            {
-                invalid("subjectPublicKey has invalid length\n");
-            }
-
-            state->results.pubkey_len = state->b - 1;
-            state->a = 0;
-
-            /* skip bit string first byte indicating n.o. bits padding at end of string */
-            step_state();
-
-        /* subjectPublicKey: copy bytes */
-state161_copy_subjectpublickey:
-        case 161:
-            state->results.pubkey[state->a] = *data;
-            state->a++;
-            if (l(state->a < state->results.pubkey_len)) {
-                step_state_to(161, state161_copy_subjectpublickey);
-            }
-
-            if (ul(state->debug)) {
-                pr_info("xt_sslpin: sslparser: pubkey = [");
-                printhex(state->results.pubkey, state->results.pubkey_len);
-                printk("]\n");
-            }
-
-            bind_state_remain(state->firstcert_remain + 1);
-            step_state_to(170, state170_skip_remaining_firstcert);
-
-
-state170_skip_remaining_firstcert:
-        /* Certificate message parsing complete - skip to next SSL/TLS message */
-        case 170:
-            if (ul(data_remain() < state_remain())) {
-                state->state_remain = state_remain() - data_remain();
-                need_more_data();
-            }
-            data += state_remain();
-
-            bind_state_remain(state->msg_remain - 1);
-            go_state(171, state171_skip_remaining_certs);
-
-state171_skip_remaining_certs:
-        case 171:
-            if (ul(data_remain() < state_remain())) {
-                state->state_remain = state_remain() - data_remain();
                 need_more_data();
             }
 
-            data += state_remain();
-            bind_state_remain(state->record_remain - 1);
+            if(ul(crypto_shash_update(state->hash.desc, data, state->cert_remain) < 0)){
+                invalid("hash update failed\n");
+            }
 
-            if (l(state_remain())) {
+            // hash finished: callback
+            if(ul(crypto_shash_final(state->hash.desc, state->hash.val) < 0)){
+                invalid("hash final failed\n");
+            }
+
+            debug("hash: %hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx\n",
+                state->hash.val[0],
+                state->hash.val[1],
+                state->hash.val[2],
+                state->hash.val[3],
+                state->hash.val[4],
+                state->hash.val[5],
+                state->hash.val[6],
+                state->hash.val[7],
+                state->hash.val[8],
+                state->hash.val[9],
+                state->hash.val[11],
+                state->hash.val[12],
+                state->hash.val[13],
+                state->hash.val[14],
+                state->hash.val[15],
+                state->hash.val[16],
+                state->hash.val[17],
+                state->hash.val[18],
+                state->hash.val[19]
+            );
+
+            data += state->cert_remain;
+            state->state_remain = state_remain() - state->cert_remain + 1;
+
+            if(state_remain() != 1){
+                // more certificates: loop
+                step_state_to(50, state_50_finger_print_certificate);
+            }else{ 
+                // message end
                 go_state(5, state5_message_begin);
             }
-
-            /* no more messages in record */
-            go_state(0, state0_record_begin);
 
     }
 

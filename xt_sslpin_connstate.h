@@ -17,6 +17,7 @@
 #ifndef _LINUX_NETFILTER_XT_SSLPIN_CONNSTATE_H
 #define _LINUX_NETFILTER_XT_SSLPIN_CONNSTATE_H
 
+#include <crypto/hash.h>
 
 #include "xt_sslpin_sslparser.h"
 
@@ -42,11 +43,13 @@ struct sslpin_connstate {
 
 
 /* per-connection state tracking table */
-static struct rb_root       sslpin_connstate_root       = RB_ROOT;
-static struct kmem_cache    *sslpin_connstate_cache     __read_mostly;
-static struct kmem_cache    *sslpin_parserctx_cache     __read_mostly;
-static __u32                sslpin_connstate_count      = 0;
-static __u32                sslpin_parserctx_count      = 0;
+static struct rb_root       sslpin_connstate_root             = RB_ROOT;
+static struct kmem_cache    *sslpin_connstate_cache           __read_mostly;
+static struct kmem_cache    *sslpin_parserctx_cache           __read_mostly;
+static struct kmem_cache    *sslpin_parserctx_hash_desc_cache __read_mostly;
+static struct kmem_cache    *sslpin_parserctx_hash_val_cache  __read_mostly;
+static __u32                sslpin_connstate_count            = 0;
+static __u32                sslpin_parserctx_count            = 0;
 
 
 /* print n.o. tracked connections */
@@ -59,19 +62,41 @@ static void sslpin_connstate_debug_count(void)
 
 
 /* create parser_ctx for conn */
-static struct sslparser_ctx * sslpin_connstate_bind_parser(struct sslpin_connstate *state, const bool enable_debug)
+static struct sslparser_ctx * sslpin_connstate_bind_parser(struct sslpin_connstate *state,
+    const bool enable_debug,
+    struct crypto_shash * const tfm)
 {
     if (unlikely(state->parser_ctx)) {
         return state->parser_ctx;
     }
 
     state->parser_ctx = kmem_cache_zalloc(sslpin_parserctx_cache, GFP_ATOMIC);
-    if (likely(state->parser_ctx)) {
-        state->parser_ctx->debug = enable_debug;
-        sslpin_parserctx_count++;
-        if (unlikely(sslpin_mt_has_debug_rules)) {
-            sslpin_connstate_debug_count();
-        }
+    if (unlikely(!state->parser_ctx)) {
+        return state->parser_ctx;
+    }
+
+    state->parser_ctx->debug = enable_debug;
+
+    state->parser_ctx->hash.desc = kmem_cache_zalloc(
+        sslpin_parserctx_hash_desc_cache,
+        GFP_ATOMIC
+    );
+    if(unlikely(!state->parser_ctx->hash.desc)){
+        return state->parser_ctx;
+    }
+    state->parser_ctx->hash.desc->tfm = tfm;
+
+    state->parser_ctx->hash.val = kmem_cache_zalloc(
+        sslpin_parserctx_hash_val_cache,
+        GFP_ATOMIC
+    );
+    if(unlikely(!state->parser_ctx->hash.val)){
+        return state->parser_ctx;
+    }
+
+    sslpin_parserctx_count++;
+    if (unlikely(sslpin_mt_has_debug_rules)) {
+        sslpin_connstate_debug_count();
     }
     return state->parser_ctx;
 }
@@ -80,6 +105,10 @@ static struct sslparser_ctx * sslpin_connstate_bind_parser(struct sslpin_connsta
 static void sslpin_connstate_unbind_parser(struct sslpin_connstate *state)
 {
     if (likely(state->parser_ctx)) {
+        kmem_cache_free(sslpin_parserctx_hash_desc_cache, state->parser_ctx->hash.desc);
+        state->parser_ctx->hash.desc = NULL;
+        kmem_cache_free(sslpin_parserctx_hash_val_cache, state->parser_ctx->hash.val);
+        state->parser_ctx->hash.val = NULL;
         kmem_cache_free(sslpin_parserctx_cache, state->parser_ctx);
         state->parser_ctx = NULL;
         sslpin_parserctx_count--;
@@ -100,20 +129,38 @@ static void sslpin_connstate_remove(struct sslpin_connstate *state)
 
 
 /* init conn tracking table */
-static bool sslpin_connstate_cache_init(void)
+static bool sslpin_connstate_cache_init(struct crypto_shash * const tfm)
 {
     sslpin_connstate_cache = kmem_cache_create("xt_sslpin_connstate", sizeof(struct sslpin_connstate), 0, 0, NULL);
     if (unlikely(!sslpin_connstate_cache)) {
-        return false;
+        goto err;
     }
 
     sslpin_parserctx_cache = kmem_cache_create("xt_sslpin_parser", sizeof(struct sslparser_ctx), 0, 0, NULL);
     if (unlikely(!sslpin_parserctx_cache)) {
-        kmem_cache_destroy(sslpin_connstate_cache);
-        return false;
+        goto err_parserctx;
+    }
+    
+    sslpin_parserctx_hash_desc_cache = kmem_cache_create("xt_sslpin_parser_hash_desc", sizeof(struct shash_desc) + crypto_shash_descsize(tfm), 0, 0, NULL);
+    if (unlikely(!sslpin_parserctx_hash_desc_cache)) {
+        goto err_parserctx_hash_desc;
+    }
+
+    sslpin_parserctx_hash_val_cache = kmem_cache_create("xt_sslpin_parser_hash_val", crypto_shash_digestsize(tfm), 0, 0, NULL);
+    if (unlikely(!sslpin_parserctx_hash_val)) {
+        goto err_parserctx_hash_val;
     }
 
     return true;
+
+err_parserctx_hash_val:
+    kmem_cache_destroy(sslpin_parserctx_hash_desc);
+err_parserctx_hash_desc:
+    kmem_cache_destroy(sslpin_parserctx_cache);
+err_parserctx:
+    kmem_cache_destroy(sslpin_connstate_cache);
+err:
+    return false;
 }
 
 

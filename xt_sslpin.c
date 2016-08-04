@@ -16,6 +16,13 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
+
+#include <linux/init.h>
+#include <linux/kernel.h>
+#include <linux/fs.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
+
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/netfilter/x_tables.h>
@@ -32,8 +39,8 @@
 #include "xt_sslpin_sslparser.h"
 
 
-MODULE_AUTHOR       ( "fredburger (github.com/fredburger) ");
-MODULE_DESCRIPTION  ( "xtables: match SSL/TLS certificate public key" );
+MODULE_AUTHOR       ( "Enteee (duckpond.ch) ");
+MODULE_DESCRIPTION  ( "xtables: match SSL/TLS certificate fingerprints" );
 MODULE_LICENSE      ( "GPL" );
 MODULE_ALIAS        ( "ipt_sslpin" );
 
@@ -41,7 +48,6 @@ MODULE_ALIAS        ( "ipt_sslpin" );
 /* forward decls */
 static struct nf_ct_event_notifier  sslpin_conntrack_notifier;
 static struct xt_match              sslpin_mt_reg               __read_mostly;
-
 
 /* module init function */
 static int __init sslpin_mt_init(void)
