@@ -385,7 +385,12 @@ state50_finger_print_certificate:
             }
 
             // message end
-            step_state_to(5, state5_message_begin);
+            if(state->record_remain){
+                // more messages
+                step_state_to(5, state5_message_begin);
+            }
+
+            step_state_to(0, state0_record_begin);
     }
 
     invalid("error in parser: unhandled state %d\n", statev);
