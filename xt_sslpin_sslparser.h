@@ -305,7 +305,7 @@ state40_parse_certificate_message:
                 invalid("certificates data length %d != msg_remain %d\n", state->a, state->msg_remain);
             }
 
-            state->record_remain = state_remain() - state->msg_remain;
+            state->record_remain = state_remain() - state->msg_remain - 1;
             bind_state_remain(state->msg_remain + 1);
 
             step_state_to(50, state50_finger_print_certificate);
