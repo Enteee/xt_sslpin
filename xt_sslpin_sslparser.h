@@ -273,7 +273,7 @@ state20_skip_message:
             }
 
             data += state->msg_remain;
-            if (l(data < state_end)) {
+            if (l(state_remain())) {
                 go_state(5, state5_message_begin);
             }
 
@@ -347,7 +347,7 @@ state50_finger_print_certificate:
                 invalid("hash final failed\n");
             }
 
-            debug("hash: %hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx\n",
+            debug("finger print: %hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx\n",
                 state->hash.val[0],
                 state->hash.val[1],
                 state->hash.val[2],
@@ -375,17 +375,15 @@ state50_finger_print_certificate:
                 state->cb.cert_fingerprint(state->hash.val, state->cb.cert_fingerprint_data);
             }
 
-            data += state->cert_remain;
-            state->state_remain = state_remain() - state->cert_remain + 1;
-
+            data += state->cert_remain - 1;
             if(state_remain() != 1){
                 // more certificates: loop
+                debug("more certificates\n");
                 step_state_to(50, state50_finger_print_certificate);
-            }else{ 
-                // message end
-                go_state(5, state5_message_begin);
             }
 
+            // message end
+            step_state_to(5, state5_message_begin);
     }
 
     invalid("error in parser: unhandled state %d\n", statev);
