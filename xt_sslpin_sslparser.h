@@ -215,6 +215,7 @@ state5_message_begin:
         /* byte 5: message type: expect Handshake or ChangeCipherSpec */
         case 5:
             if (ul(!data_remain())) {
+                debug("message begin: need more data");
                 need_more_data();
             }
 
@@ -347,7 +348,7 @@ state50_finger_print_certificate:
                 invalid("hash final failed\n");
             }
 
-            debug("finger print: %hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx:%hhx%hhx\n",
+            debug("finger print: %hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx\n",
                 state->hash.val[0],
                 state->hash.val[1],
                 state->hash.val[2],
