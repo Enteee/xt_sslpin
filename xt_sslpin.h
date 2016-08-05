@@ -17,7 +17,7 @@
 #ifndef _LINUX_NETFILTER_XT_SSLPIN_H
 #define _LINUX_NETFILTER_XT_SSLPIN_H
 
-
+#define XT_SSLPIN_VERSION "2.0"
 
 /* xt_sslpin rule flags */
 typedef enum {

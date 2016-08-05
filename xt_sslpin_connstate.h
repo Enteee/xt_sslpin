@@ -63,8 +63,8 @@ static void sslpin_connstate_debug_count(void)
 
 /* create parser_ctx for conn */
 static struct sslparser_ctx * sslpin_connstate_bind_parser(struct sslpin_connstate *state,
-    const bool enable_debug,
-    struct crypto_shash * const tfm)
+    struct crypto_shash * const tfm,
+    const bool enable_debug)
 {
     if (unlikely(state->parser_ctx)) {
         return state->parser_ctx;
@@ -147,14 +147,14 @@ static bool sslpin_connstate_cache_init(struct crypto_shash * const tfm)
     }
 
     sslpin_parserctx_hash_val_cache = kmem_cache_create("xt_sslpin_parser_hash_val", crypto_shash_digestsize(tfm), 0, 0, NULL);
-    if (unlikely(!sslpin_parserctx_hash_val)) {
+    if (unlikely(!sslpin_parserctx_hash_val_cache)) {
         goto err_parserctx_hash_val;
     }
 
     return true;
 
 err_parserctx_hash_val:
-    kmem_cache_destroy(sslpin_parserctx_hash_desc);
+    kmem_cache_destroy(sslpin_parserctx_hash_desc_cache);
 err_parserctx_hash_desc:
     kmem_cache_destroy(sslpin_parserctx_cache);
 err_parserctx:

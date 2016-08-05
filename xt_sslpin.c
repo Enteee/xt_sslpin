@@ -16,8 +16,8 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-
 #include <linux/init.h>
+#include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
@@ -38,6 +38,8 @@
 #include "xt_sslpin_connstate.h"
 #include "xt_sslpin_sslparser.h"
 
+#define SSLPIN_HASH_ALGO "sha1"
+
 
 MODULE_AUTHOR       ( "Enteee (duckpond.ch) ");
 MODULE_DESCRIPTION  ( "xtables: match SSL/TLS certificate fingerprints" );
@@ -48,15 +50,22 @@ MODULE_ALIAS        ( "ipt_sslpin" );
 /* forward decls */
 static struct nf_ct_event_notifier  sslpin_conntrack_notifier;
 static struct xt_match              sslpin_mt_reg               __read_mostly;
+static struct crypto_shash *        sslpin_hash                 __read_mostly;
 
 /* module init function */
 static int __init sslpin_mt_init(void)
 {
     int ret;
 
-    pr_info("xt_sslpin 1.0 (SSL/TLS pinning)\n");
+    pr_info("xt_sslpin "XT_SSLPIN_VERSION" (SSL/TLS pinning)\n");
+    
+    sslpin_hash = crypto_alloc_shash(SSLPIN_HASH_ALGO, 0, CRYPTO_ALG_TYPE_SHASH);
+    if(IS_ERR(sslpin_hash)){
+        pr_err("xt_sslpin: coult not allocate hashing metadata\n");
+        return PTR_ERR(sslpin_hash);
+    }
 
-    if (!sslpin_connstate_cache_init()) {
+    if (!sslpin_connstate_cache_init(sslpin_hash)) {
         pr_err("xt_sslpin: could not allocate sslpin_connstate cache\n");
         return -ENOMEM;
     }
@@ -82,10 +91,11 @@ static int __init sslpin_mt_init(void)
 /* module exit function */
 static void __exit sslpin_mt_exit(void)
 {
-    pr_info("xt_sslpin 1.0 unload\n");
+    pr_info("xt_sslpin "XT_SSLPIN_VERSION" unload\n");
     xt_unregister_match(&sslpin_mt_reg);
     nf_conntrack_unregister_notifier(&init_net, &sslpin_conntrack_notifier);
     sslpin_connstate_cache_destroy();
+    crypto_free_shash(sslpin_hash);
 }
 
 
@@ -106,31 +116,6 @@ static int sslpin_mt_check(const struct xt_mtchk_param *par)
     struct sslpin_mtruleinfo *mtruleinfo = par->matchinfo;
 
     /* sanity check input options */
-    if (unlikely(mtruleinfo->cn_len > SSLPIN_MAX_COMMON_NAME_UTF8_BYTELEN)) {
-        return EINVAL;
-    }
-
-    if (unlikely(mtruleinfo->cn[SSLPIN_MAX_COMMON_NAME_UTF8_BYTELEN])) {
-        return EINVAL;
-    }
-
-    if (unlikely((!mtruleinfo->pk_alg.name[0]) || mtruleinfo->pk_alg.name[sizeof(mtruleinfo->pk_alg.name) - 1])) {
-        return EINVAL;
-    }
-
-    if (unlikely(mtruleinfo->pk_alg.oid_asn1[0] < 3)) {
-        return EINVAL;
-    }
-
-    if (unlikely(mtruleinfo->pk_alg.oid_asn1[0] > sizeof(mtruleinfo->pk_alg.oid_asn1) - 1)) {
-        return EINVAL;
-    }
-
-    if (unlikely((mtruleinfo->pk_len < SSLPIN_MIN_PUBLIC_KEY_BYTELEN)
-        || (mtruleinfo->pk_len > SSLPIN_MAX_PUBLIC_KEY_BYTELEN)))
-    {
-        return EINVAL;
-    }
 
     /* update sslpin_mt_has_debug_rules */
     spin_lock_bh(&sslpin_mt_lock);
@@ -154,31 +139,12 @@ static bool sslpin_match_certificate(const struct sslpin_mtruleinfo * const mtru
 {
     const bool invert = mtruleinfo->flags & SSLPIN_RULE_FLAG_INVERT;
 
-    if (unlikely(!sslpin_pubkeyalg_equalnames(&mtruleinfo->pk_alg, parser_ctx->results.pubkey_alg))) {
-        return invert;
-    }
-
-    if (unlikely((!mtruleinfo->pk_len) || (mtruleinfo->pk_len != parser_ctx->results.pubkey_len))) {
-        return invert;
-    }
-
-    if (unlikely(memcmp(mtruleinfo->pk, parser_ctx->results.pubkey, mtruleinfo->pk_len))) {
-        return invert;
-    }
-
-    if (unlikely(mtruleinfo->cn_len)) {
-        if (unlikely(mtruleinfo->cn_len != parser_ctx->results.cn_len)) {
-            return invert;
-        }
-
-        if (unlikely(memcmp(mtruleinfo->cn, parser_ctx->results.cn, mtruleinfo->cn_len))) {
-            return invert;
-        }
-    }
-
     return !invert;
 }
 
+void cert_fingerprint_cb(const __u8 * const val, void* data){
+    pr_info("xt_sslpin: cert_fingerprint_cb called!");
+}
 
 /*
  * main packet matching function
@@ -433,7 +399,7 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
         /* allocate parser ctx for conn */
         if (unlikely(!state->parser_ctx)) {
-            if (unlikely(!sslpin_connstate_bind_parser(state, sslpin_mt_has_debug_rules))) {
+            if (unlikely(!sslpin_connstate_bind_parser(state, sslpin_hash, sslpin_mt_has_debug_rules))) {
                 state->state = SSLPIN_CONNSTATE_INVALID;
                 spin_unlock_bh(&sslpin_mt_lock);
                 par->hotdrop = true;
@@ -443,6 +409,8 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
                 }
                 return false;
             }
+            /* register callback */
+            SSLPARSER_CTX_REGISTER_CALLBACK(state->parser_ctx, cert_fingerprint, cert_fingerprint_cb, NULL);
         }
 
         /* non-paged data */
@@ -494,12 +462,11 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
     }
 
 
-    /* check certificate public key */
+    /* check if matched */
     matched = likely(state->parser_ctx) && sslpin_match_certificate(mtruleinfo, state->parser_ctx);
 
     if (unlikely(debug_enabled)) {
-        pr_info("xt_sslpin: rule %smatched (cn = \"%s\")\n", matched ? "" : "not ",
-            state->parser_ctx ? (char*)&state->parser_ctx->results.cn : NULL);
+        pr_info("xt_sslpin: rule %smatched\n", matched ? "" : "not ");
     }
 
     spin_unlock_bh(&sslpin_mt_lock);

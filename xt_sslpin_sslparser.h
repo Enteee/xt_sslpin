@@ -17,7 +17,6 @@
 #ifndef _LINUX_NETFILTER_XT_SSLPIN_SSLPARSER_H
 #define _LINUX_NETFILTER_XT_SSLPIN_SSLPARSER_H
 
-#include <crypto/ahash.h>
 #include <linux/err.h>
 #include <linux/scatterlist.h>
 
@@ -30,6 +29,8 @@ typedef enum {
     SSLPARSER_RES_FINISHED
 } sslparser_res_t;
 
+
+typedef void (*sslparser_hash_cb)(const __u8 * const val, void* data);
 
 #define SSLPARSER_MAX_COMMON_NAME_LEN               SSLPIN_MAX_COMMON_NAME_UTF8_BYTELEN
 #define SSLPARSER_MAX_PUBLIC_KEY_BYTELEN            SSLPIN_MAX_PUBLIC_KEY_BYTELEN
@@ -57,7 +58,16 @@ struct sslparser_ctx {
         struct shash_desc * desc;
         __u8 *              val;
     } hash;
-    
+
+    /* Callbacks */
+    struct {
+      sslparser_hash_cb     cert_fingerprint;
+      void *                cert_fingerprint_data;
+
+#define SSLPARSER_CTX_REGISTER_CALLBACK(ctx, name, callback, data)                \
+    ctx->cb.name = callback;                                                      \
+    ctx->cb.name ## _data = data;
+    } cb;
 
     /* Parser results */
     struct {
@@ -150,11 +160,8 @@ struct sslparser_ctx {
     go_state(new_state, label);
 
 
-static sslparser_res_t sslparser(struct sslparser_ctx * const state, struct * const crypto_shash, const __u8 *data, const __u32 data_len)
+static sslparser_res_t sslparser(struct sslparser_ctx * const state, const __u8 *data, const __u32 data_len)
 {
-    const __u8  version_bytes[]         = { 0xa0, 0x03, 0x02, 0x01, 0x02 };
-    const __u8  cert_skiplist_types[]   = { 0x02, 0x30, 0x30, 0x30 };
-    const __u8  rdn_attrtype_prefix[]   = { 0x06, 0x03, 0x55, 0x04 };
     const __u8 *const data_end          = data + data_len;
     const __u8 *state_end               = data + state->state_remain;
     __u8        statev                  = state->state;
@@ -299,7 +306,7 @@ state40_parse_certificate_message:
             state->record_remain = state_remain() - state->msg_remain;
             bind_state_remain(state->msg_remain + 1);
 
-            step_state_to(50, state_50_finger_print_certificate);
+            step_state_to(50, state50_finger_print_certificate);
 
 state50_finger_print_certificate:
         /* parse certificate length (3 bytes) */
@@ -351,6 +358,7 @@ state50_finger_print_certificate:
                 state->hash.val[7],
                 state->hash.val[8],
                 state->hash.val[9],
+                state->hash.val[10],
                 state->hash.val[11],
                 state->hash.val[12],
                 state->hash.val[13],
@@ -361,13 +369,18 @@ state50_finger_print_certificate:
                 state->hash.val[18],
                 state->hash.val[19]
             );
+            
+            // callback
+            if(state->cb.cert_fingerprint){
+                state->cb.cert_fingerprint(state->hash.val, state->cb.cert_fingerprint_data);
+            }
 
             data += state->cert_remain;
             state->state_remain = state_remain() - state->cert_remain + 1;
 
             if(state_remain() != 1){
                 // more certificates: loop
-                step_state_to(50, state_50_finger_print_certificate);
+                step_state_to(50, state50_finger_print_certificate);
             }else{ 
                 // message end
                 go_state(5, state5_message_begin);

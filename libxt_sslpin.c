@@ -27,72 +27,9 @@
 
 /* parameter definitions */
 static const struct option sslpin_mt_opts[] = {
-    { .name = "pubkey",     .has_arg = true,    .val = 'p' },
     { .name = "debug",      .has_arg = false,   .val = 'd' },
     { NULL },
 };
-
-
-/* parse pubkey option (<alg>:<key-hex>) */
-static bool parse_pubkey_opt(struct sslpin_mtruleinfo *mtruleinfo, char *optarg)
-{
-    const struct sslpin_pubkeyalg *pubkeyalg = pubkeyalgs;     /* see xt_sslpin.h */
-    char *colon, *hex;
-    int alg_len, pk_len, i;
-    __u8 *pk, *pk_max;
-    __u8 ms, ls;
-
-    /* find pubkeyalg */
-    colon = strchr(optarg, ':');
-    if (!colon) {
-        return false;
-    }
-
-    if (!(alg_len = colon - optarg)) {
-        return false;
-    }
-
-    for (i = 0; i < SSLPIN_PUBLIC_KEY_ALGS_CNT; i++, pubkeyalg++) {
-        if ((!strncmp(optarg, pubkeyalg->name, alg_len)) && (!pubkeyalg->name[alg_len])) {
-            break;
-        }
-    }
-
-    /* unknown algorithm */
-    if (i == SSLPIN_PUBLIC_KEY_ALGS_CNT) {
-        return false;
-    }
-
-    mtruleinfo->pk_alg = *pubkeyalg;
-
-    /* parse pubkey hex string to bytes */
-    hex = colon + 1;
-    pk = mtruleinfo->pk;
-    pk_max = pk + sizeof(mtruleinfo->pk);
-    while (*hex) {
-        if ((!hex[1]) || (pk == pk_max)) {
-            return false;
-        }
-
-        ms = hexc2int(hex[0]);
-        ls = hexc2int(hex[1]);
-        if ((ms > 15) || (ls > 15)) {
-            return false;
-        }
-
-        *pk++ = (ms << 4) | ls;
-        hex += 2;
-    }
-
-    pk_len = pk - mtruleinfo->pk;
-    if (pk_len < SSLPIN_MIN_PUBLIC_KEY_BYTELEN) {
-        return false;
-    }
-
-    mtruleinfo->pk_len = pk_len;
-    return true;
-}
-
 
 /* xtables_register_match() module init callback */         /* not needed */
 /*
@@ -107,10 +44,7 @@ static void sslpin_mt_help(void)
 {
     printf(
         "sslpin match options:\n"
-        "[!] --pubkey\t<pubkey-alg>:<pubkey-hex>\n"
-        "\t\t\t\tSSL/TLS Certificate Public Key specification\n"
-        "\t\t\t\tpubkey-alg: either \"rsa\", \"ec\" or \"dsa\"\n"
-        "    --debug\t\t\tverbose mode (see kernel log)\n"
+        "    --debug      verbose mode (see kernel log)\n"
         "\n"
         );
 }
@@ -123,18 +57,6 @@ static int sslpin_mt_parse(int c, char **argv, int invert, unsigned int *flags, 
     struct sslpin_mtruleinfo *mtruleinfo = (struct sslpin_mtruleinfo*)(*match)->data;
 
     switch (c) {
-        case 'p':
-            if (*flags) {
-                xtables_error(PARAMETER_PROBLEM, "sslpin: --pubkey can only be specified once");
-            }
-            if (!parse_pubkey_opt(mtruleinfo, optarg)) {
-                xtables_error(PARAMETER_PROBLEM, "sslpin: unable to parse --pubkey argument");
-            }
-            if (invert) {
-                mtruleinfo->flags |= SSLPIN_RULE_FLAG_INVERT;
-            }
-            *flags = 1;     /* pubkey has been set, see sslpin_mt_check() */
-            break;
         case 'd':
             mtruleinfo->flags |= SSLPIN_RULE_FLAG_DEBUG;
             break;
@@ -149,9 +71,9 @@ static int sslpin_mt_parse(int c, char **argv, int invert, unsigned int *flags, 
 /* check options after parsing */
 static void sslpin_mt_check(unsigned int flags)
 {
-    if (flags == 0) {
-        xtables_error(PARAMETER_PROBLEM, "sslpin: must specify --pubkey");
-    }
+//    if (flags == 0) {
+//        xtables_error(PARAMETER_PROBLEM, "sslpin: must specify a name");
+//    }
 }
 
 
@@ -168,9 +90,6 @@ static void sslpin_mt_print(const void *entry, const struct xt_entry_match *matc
     if (mtruleinfo->flags & SSLPIN_RULE_FLAG_INVERT) {
         printf(" !");
     }
-    printf(" alg: ");
-    printf("%s", mtruleinfo->pk_alg.name);
-    printf(" pk: (hex)");
 }
 
 
@@ -185,11 +104,6 @@ static void sslpin_mt_save(const void *entry, const struct xt_entry_match *match
     if (mtruleinfo->flags & SSLPIN_RULE_FLAG_INVERT) {
         printf(" !");
     }
-    printf(" --pubkey ");
-    printf("%s", mtruleinfo->pk_alg.name);
-    printf(":");
-
-    printhex(mtruleinfo->pk, mtruleinfo->pk_len);
 }
 
 
