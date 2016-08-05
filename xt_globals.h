@@ -19,8 +19,9 @@
 
 
 static DEFINE_SPINLOCK( sslpin_mt_lock);
-static bool             sslpin_mt_has_debug_rules               __read_mostly  = false;
-static bool             sslpin_mt_checked_after_destroy         = false;
+static bool                   sslpin_mt_has_debug_rules       __read_mostly  = false;
+static bool                   sslpin_mt_checked_after_destroy = false;
+static struct crypto_shash *  sslpin_hash                     __read_mostly;
 
 
 #endif /* _LINUX_NETFILTER_XT_SSLPIN_GLOBALS_H */

@@ -18,6 +18,9 @@
 #define _LINUX_NETFILTER_XT_SSLPIN_H
 
 #define XT_SSLPIN_VERSION "2.0"
+#define XT_SSLPIN_CERT_FINGERPRINTS_HASHTABLE_SIZE 11 /* half a page */
+
+#define XT_SSLPIN_HASH_ALGO "sha1"
 
 /* xt_sslpin rule flags */
 typedef enum {
@@ -30,9 +33,10 @@ typedef enum {
    shared between kernel & userspace up until kernpriv struct (kernel-only private data)
    per rule */
 struct sslpin_mtruleinfo {
-    sslpin_rule_flags_t         flags;
-
+    sslpin_rule_flags_t           flags;
+    char *                        name;
     struct {
+        struct proc_dir_entry *       proc_file_entry;
     } kernpriv __attribute__((aligned(8)));
 };
 

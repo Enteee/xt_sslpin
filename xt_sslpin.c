@@ -38,9 +38,6 @@
 #include "xt_sslpin_connstate.h"
 #include "xt_sslpin_sslparser.h"
 
-#define SSLPIN_HASH_ALGO "sha1"
-
-
 MODULE_AUTHOR       ( "Enteee (duckpond.ch) ");
 MODULE_DESCRIPTION  ( "xtables: match SSL/TLS certificate fingerprints" );
 MODULE_LICENSE      ( "GPL" );
@@ -50,7 +47,10 @@ MODULE_ALIAS        ( "ipt_sslpin" );
 /* forward decls */
 static struct nf_ct_event_notifier  sslpin_conntrack_notifier;
 static struct xt_match              sslpin_mt_reg               __read_mostly;
-static struct crypto_shash *        sslpin_hash                 __read_mostly;
+
+static const struct file_operations proc_file_fops = {
+    .owner = THIS_MODULE,
+};
 
 /* module init function */
 static int __init sslpin_mt_init(void)
@@ -59,7 +59,7 @@ static int __init sslpin_mt_init(void)
 
     pr_info("xt_sslpin "XT_SSLPIN_VERSION" (SSL/TLS pinning)\n");
     
-    sslpin_hash = crypto_alloc_shash(SSLPIN_HASH_ALGO, 0, CRYPTO_ALG_TYPE_SHASH);
+    sslpin_hash = crypto_alloc_shash(XT_SSLPIN_HASH_ALGO, 0, CRYPTO_ALG_TYPE_SHASH);
     if(IS_ERR(sslpin_hash)){
         pr_err("xt_sslpin: coult not allocate hashing metadata\n");
         return PTR_ERR(sslpin_hash);
@@ -104,6 +104,10 @@ static void __exit sslpin_mt_exit(void)
  * then sslpin_mt_destroy() will be called */
 static void sslpin_mt_destroy(const struct xt_mtdtor_param *par)
 {
+    struct sslpin_mtruleinfo *mtruleinfo = par->matchinfo;
+    if(mtruleinfo->kernpriv.proc_file_entry){
+        proc_remove(mtruleinfo->kernpriv.proc_file_entry);
+    }
     spin_lock_bh(&sslpin_mt_lock);
     sslpin_mt_checked_after_destroy = false;
     spin_unlock_bh(&sslpin_mt_lock);
@@ -116,6 +120,14 @@ static int sslpin_mt_check(const struct xt_mtchk_param *par)
     struct sslpin_mtruleinfo *mtruleinfo = par->matchinfo;
 
     /* sanity check input options */
+    
+    // register proc for rule
+    pr_info("registering: %s\n", mtruleinfo->name);
+    mtruleinfo->kernpriv.proc_file_entry = proc_create(mtruleinfo->name, 0, NULL, &proc_file_fops);
+    if(unlikely(mtruleinfo->kernpriv.proc_file_entry == NULL)){
+        pr_err("xt_sslpin: could not create proc with name: %s\n", mtruleinfo->name);
+        return EINVAL;
+    }
 
     /* update sslpin_mt_has_debug_rules */
     spin_lock_bh(&sslpin_mt_lock);
@@ -142,7 +154,7 @@ static bool sslpin_match_certificate(const struct sslpin_mtruleinfo * const mtru
     return !invert;
 }
 
-void cert_fingerprint_cb(const __u8 * const val, void* data){
+void cert_fingerprint_cb(const __u8 * const val, void * data){
     pr_info("xt_sslpin: cert_fingerprint_cb called!");
 }
 
