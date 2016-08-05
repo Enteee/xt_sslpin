@@ -36,7 +36,7 @@ struct sslpin_mtruleinfo {
     sslpin_rule_flags_t           flags;
     char *                        name;
     struct {
-        struct kobject *              comm;
+        void *                        comm;
     } kernpriv __attribute__((aligned(8)));
 };
 
