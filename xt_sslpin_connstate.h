@@ -105,12 +105,15 @@ static struct sslparser_ctx * sslpin_connstate_bind_parser(struct sslpin_connsta
 static void sslpin_connstate_unbind_parser(struct sslpin_connstate *state)
 {
     if (likely(state->parser_ctx)) {
-        kmem_cache_free(sslpin_parserctx_hash_desc_cache, state->parser_ctx->hash.desc);
-        state->parser_ctx->hash.desc = NULL;
         kmem_cache_free(sslpin_parserctx_hash_val_cache, state->parser_ctx->hash.val);
         state->parser_ctx->hash.val = NULL;
+
+        kmem_cache_free(sslpin_parserctx_hash_desc_cache, state->parser_ctx->hash.desc);
+        state->parser_ctx->hash.desc = NULL;
+
         kmem_cache_free(sslpin_parserctx_cache, state->parser_ctx);
         state->parser_ctx = NULL;
+
         sslpin_parserctx_count--;
         if (unlikely(sslpin_mt_has_debug_rules)) {
             sslpin_connstate_debug_count();
@@ -181,11 +184,21 @@ static void sslpin_connstate_cache_destroy(void)
         sslpin_connstate_remove(state);
     }
 
+    if (likely(sslpin_parserctx_hash_val_cache)) {
+        kmem_cache_destroy(sslpin_parserctx_hash_val_cache);
+    }
+
+    if (likely(sslpin_parserctx_hash_desc_cache)) {
+        kmem_cache_destroy(sslpin_parserctx_hash_desc_cache);
+    }
+
     if (likely(sslpin_parserctx_cache)) {
         kmem_cache_destroy(sslpin_parserctx_cache);
     }
 
-    kmem_cache_destroy(sslpin_connstate_cache);
+    if(sslpin_connstate_cache){
+        kmem_cache_destroy(sslpin_connstate_cache);
+    }
 }
 
 
