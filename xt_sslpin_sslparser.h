@@ -220,6 +220,7 @@ state5_message_begin:
             }
 
             state->msg_type = *data;
+            debug("new message: %d\n", state->msg_type);
 
             /* ChangeCipherSpec record? */
             if (ul(state->record_type == SSL3_RT_CHANGE_CIPHER_SPEC)) {
