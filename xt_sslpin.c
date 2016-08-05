@@ -20,7 +20,7 @@
 #include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
-#include <linux/proc_fs.h>
+#include <linux/kobject.h>
 #include <linux/seq_file.h>
 
 #include <linux/ip.h>
@@ -47,10 +47,6 @@ MODULE_ALIAS        ( "ipt_sslpin" );
 /* forward decls */
 static struct nf_ct_event_notifier  sslpin_conntrack_notifier;
 static struct xt_match              sslpin_mt_reg               __read_mostly;
-
-static const struct file_operations proc_file_fops = {
-    .owner = THIS_MODULE,
-};
 
 /* module init function */
 static int __init sslpin_mt_init(void)
@@ -105,8 +101,8 @@ static void __exit sslpin_mt_exit(void)
 static void sslpin_mt_destroy(const struct xt_mtdtor_param *par)
 {
     struct sslpin_mtruleinfo *mtruleinfo = par->matchinfo;
-    if(mtruleinfo->kernpriv.proc_file_entry){
-        proc_remove(mtruleinfo->kernpriv.proc_file_entry);
+    if(mtruleinfo->kernpriv.comm){
+        kobject_put(mtruleinfo->kernpriv.comm);
     }
     spin_lock_bh(&sslpin_mt_lock);
     sslpin_mt_checked_after_destroy = false;
@@ -123,9 +119,9 @@ static int sslpin_mt_check(const struct xt_mtchk_param *par)
     
     // register proc for rule
     pr_info("registering: %s\n", mtruleinfo->name);
-    mtruleinfo->kernpriv.proc_file_entry = proc_create(mtruleinfo->name, 0, NULL, &proc_file_fops);
-    if(unlikely(mtruleinfo->kernpriv.proc_file_entry == NULL)){
-        pr_err("xt_sslpin: could not create proc with name: %s\n", mtruleinfo->name);
+    mtruleinfo->kernpriv.comm = kobject_create_and_add(mtruleinfo->name, kernel_kobj);
+    if(unlikely(mtruleinfo->kernpriv.comm == NULL)){
+        pr_err("xt_sslpin: could not create kobject (name = %s)\n", mtruleinfo->name);
         return EINVAL;
     }
 
