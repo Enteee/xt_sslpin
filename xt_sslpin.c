@@ -14,13 +14,19 @@
  * the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+#include <string.h>
+
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
+
+#include <linux/hashtable.h>
+
 #include <linux/kobject.h>
+#include <linux/sysfs.h>
 #include <linux/seq_file.h>
 
 #include <linux/ip.h>
@@ -39,59 +45,167 @@
 #include "xt_sslpin_sslparser.h"
 
 MODULE_AUTHOR       ( "Enteee (duckpond.ch) ");
-MODULE_DESCRIPTION  ( "xtables: match SSL/TLS certificate fingerprints" );
+MODULE_DESCRIPTION  ( "xtables: match SSL/TLS certificate finger prints" );
 MODULE_LICENSE      ( "GPL" );
 MODULE_ALIAS        ( "ipt_sslpin" );
-
 
 /* forward decls */
 static struct nf_ct_event_notifier  sslpin_conntrack_notifier;
 static struct xt_match              sslpin_mt_reg               __read_mostly;
+static struct kobject *             sslpin_kobj                 __read_mostly;
+static struct kmem_cache            *cert_finger_print_cache    __read_mostly;
+
+typedef __u8 finger_print[20]; // 20: 160bit = sizeof(sha1)
+typedef int (*sslpin_read_finger_print_cb)(finger_print *fp, int mask);
+
+struct cert_finger_print {
+    int                 mask;
+    finger_print        fp;
+    struct hlist_node   next;
+};
+
+#define CERT_FINGER_PRINTS_HASH_BITS 10
+DEFINE_HASHTABLE(cert_finger_prints, CERT_FINGER_PRINTS_HASH_BITS);
+
+static ssize_t show_cert_finger_prints(struct kobject *kobj, struct kobj_attribute *attr, char *buf);
+static ssize_t add_cert_finger_prints(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count);
+static ssize_t rm_cert_finger_prints(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count);
+
+struct cert_finger_print_list {
+#define DEF_FINGER_PRINT_LIST(id) {                                                     \
+  .name = STR(id),                                                                      \
+  .mask = 1 << id,                                                                      \
+  .add = __ATTR(                                                                        \
+      fpl_ ## id ## _add,                                                               \
+      S_IWUSR | S_IRUGO,                                                                \
+      show_cert_finger_prints,                                                          \
+      add_cert_finger_prints                                                            \
+  )                                                                                     \
+  .rm = __ATTR(                                                                         \
+      fpl_ ## id ## _rm,                                                                \
+      S_IWUSR | S_IRUGO,                                                                \
+      show_cert_finger_prints,                                                          \
+      rm_cert_finger_prints                                                             \
+  )                                                                                     \
+}
+  char *                    name;
+  int                       mask;
+  struct kobj_attribute     add;
+  struct kobj_attribute     rm;
+};
+
+struct cert_finger_print_list cert_finger_print_lists[] = {
+    DEF_FINGER_PRINT_LIST(1),  DEF_FINGER_PRINT_LIST(2),  DEF_FINGER_PRINT_LIST(3),
+};
+
+#define SSLPIN_FINGER_PRINT_LIST_SIZE (sizeof(cert_finger_print_lists)/sizeof(*cert_finger_print_lists))
+#define SSLPIN_FINGER_PRINT_LIST_SIZE_MAX (8*sizeof(int))
+
 
 /* module init function */
 static int __init sslpin_mt_init(void)
 {
     int ret;
-
-    pr_info("xt_sslpin "XT_SSLPIN_VERSION" (SSL/TLS pinning)\n");
+    size_t i;
     
+    pr_info("xt_sslpin " XT_SSLPIN_VERSION " (SSL/TLS pinning)\n");
+    
+    if(SSLPIN_FINGER_PRINT_LIST_SIZE > SSLPIN_FINGER_PRINT_LIST_SIZE_MAX){
+        pr_err("xt_sslpin: too many finger print lists defined. recompile the module.\n");
+        ret = -1;
+        goto err;
+    }
+
     sslpin_hash = crypto_alloc_shash(XT_SSLPIN_HASH_ALGO, 0, CRYPTO_ALG_TYPE_SHASH);
     if(IS_ERR(sslpin_hash)){
         pr_err("xt_sslpin: coult not allocate hashing metadata\n");
-        return PTR_ERR(sslpin_hash);
+        ret = PTR_ERR(sslpin_hash);
+        goto err_crypto_alloc_shash;
+    }
+
+    sslpin_kobj = kobject_create_and_add(XT_SSLPIN_KOBJ_NAME, kernel_kobj);
+    if(!sslpin_kobj){
+        pr_err("xt_sslpin: could not create kobject " XT_SSLPIN_KOBJ_NAME "\n");
+        ret = EINVAL;
+        goto err_create_kobj;
+    }
+
+    for(i = 0; i < SSLPIN_FINGER_PRINT_LIST_SIZE; ++i){
+        struct cert_finger_print_list * fpl = &(cert_finger_print_lists[i]);
+        ret = sysfs_create_file(sslpin_kobj, &(fpl->add.attr));
+        if(ret){
+            pr_err("xt_sslpin: failed to create certificate finger print add-api (name = %s)\n", fpl->name);
+            ret = EINVAL;
+            goto err_finger_print_sysfs;
+        }
+        ret = sysfs_create_file(sslpin_kobj, &(fpl->rm.attr));
+        if(ret){
+            pr_err("xt_sslpin: failed to create certificate finger print rm-api (name = %s)\n", fpl->name);
+            ret = EINVAL;
+            goto err_finger_print_sysfs;
+        }
+    }
+
+    cert_finger_print_cache = kmem_cache_create("xt_sslpin_cert_finger_print_cache", sizeof(struct cert_finger_print), 0, 0, NULL);
+    if(!cert_finger_print_cache){
+        pr_err("xt_sslpin: could not allocate cert_finger_print_cache");
+        ret = ENOMEM;
+        goto err_cert_finger_print_cache_init;
     }
 
     if (!sslpin_connstate_cache_init(sslpin_hash)) {
         pr_err("xt_sslpin: could not allocate sslpin_connstate cache\n");
-        return -ENOMEM;
+        ret = ENOMEM;
+        goto err_connstate_cache_init;
     }
 
     ret = nf_conntrack_register_notifier(&init_net, &sslpin_conntrack_notifier);
     if (ret < 0) {
         pr_err("xt_sslpin: could not register conntrack event listener\n");
-        sslpin_connstate_cache_destroy();
-        return ret;
+        goto err_conntrack_register_notifier;
     }
 
     ret = xt_register_match(&sslpin_mt_reg);
     if (ret != 0) {
         pr_err("xt_sslpin: error registering sslpin match\n");
-        nf_conntrack_unregister_notifier(&init_net, &sslpin_conntrack_notifier);
-        sslpin_connstate_cache_destroy();
+        goto err_xt_register_match;
     }
 
     return ret;
+
+err_xt_register_match:
+    nf_conntrack_unregister_notifier(&init_net, &sslpin_conntrack_notifier);
+err_conntrack_register_notifier:
+    sslpin_connstate_cache_destroy();
+err_connstate_cache_init:
+    kmem_cache_destroy(cert_finger_print_cache);
+err_cert_finger_print_cache_init:
+err_finger_print_sysfs:
+    kobject_put(sslpin_kobj);
+err_create_kobj:
+    crypto_free_shash(sslpin_hash);
+err_crypto_alloc_shash:
+err:
+    return ret;
+
 }
 
-
 /* module exit function */
-static void __exit sslpin_mt_exit(void)
-{
-    pr_info("xt_sslpin "XT_SSLPIN_VERSION" unload\n");
+static void __exit sslpin_mt_exit(void){
+    int bkt;
+    struct cert_finger_print *i
+
+    hash_for_each(cert_finger_prints, bkt, next, i){
+        kmem_cache_free(i);
+    }
     xt_unregister_match(&sslpin_mt_reg);
     nf_conntrack_unregister_notifier(&init_net, &sslpin_conntrack_notifier);
     sslpin_connstate_cache_destroy();
+    kmem_cache_destroy(cert_finger_print_cache);
+    kobject_put(sslpin_kobj);
     crypto_free_shash(sslpin_hash);
+
+    pr_info("xt_sslpin: " XT_SSLPIN_VERSION " unloaded\n");
 }
 
 
@@ -100,10 +214,6 @@ static void __exit sslpin_mt_exit(void)
  * then sslpin_mt_destroy() will be called */
 static void sslpin_mt_destroy(const struct xt_mtdtor_param *par)
 {
-    struct sslpin_mtruleinfo *mtruleinfo = par->matchinfo;
-    if(mtruleinfo->kernpriv.comm){
-        kobject_put(mtruleinfo->kernpriv.comm);
-    }
     spin_lock_bh(&sslpin_mt_lock);
     sslpin_mt_checked_after_destroy = false;
     spin_unlock_bh(&sslpin_mt_lock);
@@ -114,14 +224,9 @@ static void sslpin_mt_destroy(const struct xt_mtdtor_param *par)
 static int sslpin_mt_check(const struct xt_mtchk_param *par)
 {
     struct sslpin_mtruleinfo *mtruleinfo = par->matchinfo;
-
     /* sanity check input options */
-    
-    // register proc for rule
-    pr_info("registering: %s\n", mtruleinfo->name);
-    mtruleinfo->kernpriv.comm = kobject_create_and_add(mtruleinfo->name, kernel_kobj);
-    if(unlikely(mtruleinfo->kernpriv.comm == NULL)){
-        pr_err("xt_sslpin: could not create kobject (name = %s)\n", mtruleinfo->name);
+    if(mtruleinfo->fpl_id <= 0 || mtruleinfo->fpl_id > SSLPIN_FINGER_PRINT_LIST_SIZE){
+        pr_err("invalid finger print list id\n");
         return EINVAL;
     }
 
@@ -140,18 +245,111 @@ static int sslpin_mt_check(const struct xt_mtchk_param *par)
     return 0;
 }
 
+static int sslpin_add_cert_finger_print(finger_print *fp, int mask){
+    int ret = 0;
+    struct cert_finger_print * i;
+
+    spin_lock_bh(&sslpin_mt_lock);
+
+    hash_for_each_possible(cert_finger_prints, i, next, *fp){
+        if(!memcmp(*fp, i->fp, sizeof(*fp))){
+            // found: add to mask
+            i->mask |= mask;
+
+            goto out;
+        }
+    }
+    // not found: add new finger print to hashmap
+    i = kmem_cache_zalloc(sslpin_finger_print_cache, GFP_ATOMIC);
+    if(!i){
+        pr_err("failed allocating space for new finger print\n");
+
+        ret = ENOMEM;
+        goto out;
+    }
+    i.mask = mask;
+    memcpy(i.fp, *fp, SSLPINT_FINGER_PRINT_SIZE);
+    hash_add(cert_finger_prints, &(i.next), i.fp);
+
+out:
+    spin_unlock_bh(&sslpin_mt_lock);
+    return ret;
+}
+
+static int sslpin_remove_cert_finger_print(finger_print *fp, int mask){
+    int ret = EINVAL; // default: finger print not found
+    struct cert_finger_print * i;
+    spin_lock_bh(&sslpin_mt_lock);
+
+    hash_for_each_possible(cert_finger_prints, i, next, *fp){
+        if(!memcmp(*fp, i->fp, sizeof(*fp))){
+            // found: unmask
+            i->mask &= ~mask;
+            if(!i->mask){
+                // empty mask: remove cert finger print
+                hash_del(&i->next);
+                kmem_cache_free(i);
+            }
+
+            ret = 0;
+            goto out;
+        }
+    }
+
+out:
+    spin_unlock_bh(&sslpin_mt_lock);
+    return ret;
+}
+
+static ssize_t sslpin_read_finger_print(const char *buf, size_t count, sslpin_read_finger_print_cb cb, int mask){
+    size_t i = 0;
+    finger_print fp = {0};
+    size_t fp_pos = 0; 
+
+    for(i = 0; i < count ; ++i){
+        __u8 val = hex2int(buf[i]);
+
+        if(val > 15){
+            pr_err("skipping invalid hex char in certificate finger print: %c\n", buf[i]);
+            continue;
+        }
+
+        fp[fp_pos] = val;
+        pos = (++pos) % sizeof(fp);
+        if(!pos){
+            if(cb(&fp, mask)){
+                return i;
+            }
+        }
+    }
+    return i;
+}
+
+static ssize_t add_cert_finger_prints(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count){
+    struct cert_finger_print_list *fpl = container_of(attr, struct cert_finger_print_list, add);
+    return sslpin_read_finger_print(buf, count, sslpin_add_cert_finger_print, fpl->mask);
+}
+
+static ssize_t rm_cert_finger_prints(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count){
+    struct cert_finger_print_list *fpl = container_of(attr, struct cert_finger_print_list, rm);
+    return sslpin_read_finger_print(buf, count, sslpin_remove_cert_finger_print, fpl->mask);
+}
+
+static ssize_t show_cert_finger_prints(struct kobject *kobj, struct kobj_attribute *attr, char *buf){
+    // TODO: implement
+    return sprintf(buf, "something something, dark side!\n");
+}
 
 /* compare rule specification against parsed certificate / public key */
 static bool sslpin_match_certificate(const struct sslpin_mtruleinfo * const mtruleinfo,
-            const struct sslparser_ctx * const parser_ctx)
-{
+            const struct sslparser_ctx * const parser_ctx){
     const bool invert = mtruleinfo->flags & SSLPIN_RULE_FLAG_INVERT;
 
     return !invert;
 }
 
-void cert_fingerprint_cb(const __u8 * const val, void * data){
-    pr_info("xt_sslpin: cert_fingerprint_cb called!");
+void cert_finger_print_cb(const __u8 * const val, void * data){
+    pr_info("xt_sslpin: cert_finger_print_cb called!");
 }
 
 /*
@@ -418,7 +616,7 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
                 return false;
             }
             /* register callback */
-            SSLPARSER_CTX_REGISTER_CALLBACK(state->parser_ctx, cert_fingerprint, cert_fingerprint_cb, NULL);
+            SSLPARSER_CTX_REGISTER_CALLBACK(state->parser_ctx, cert_finger_print, cert_finger_print_cb, NULL);
         }
 
         /* non-paged data */

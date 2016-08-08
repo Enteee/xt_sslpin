@@ -17,10 +17,15 @@
 #ifndef _LINUX_NETFILTER_XT_SSLPIN_H
 #define _LINUX_NETFILTER_XT_SSLPIN_H
 
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
+
 #define XT_SSLPIN_VERSION "2.0"
-#define XT_SSLPIN_CERT_FINGERPRINTS_HASHTABLE_SIZE 11 /* half a page */
+#define XT_SSLPIN_CERT_FINGER_PRINTS_HASHTABLE_SIZE 11 /* half a page */
 
 #define XT_SSLPIN_HASH_ALGO "sha1"
+
+#define XT_SSLPIN_KOBJ_NAME "xt_sslpin"
 
 /* xt_sslpin rule flags */
 typedef enum {
@@ -34,16 +39,14 @@ typedef enum {
    per rule */
 struct sslpin_mtruleinfo {
     sslpin_rule_flags_t           flags;
-    char *                        name;
+    int                           fpl_id;
     struct {
-        void *                        comm;
     } kernpriv __attribute__((aligned(8)));
 };
 
 
 #define SSLPIN_MTRULEINFO_KERN_SIZE      XT_ALIGN(sizeof(struct sslpin_mtruleinfo))
 #define SSLPIN_MTRULEINFO_USER_SIZE      offsetof(struct sslpin_mtruleinfo, kernpriv)
-
 
 static inline bool sslpin_debug_enabled(const struct sslpin_mtruleinfo *mtruleinfo) {
     return mtruleinfo->flags & SSLPIN_RULE_FLAG_DEBUG;

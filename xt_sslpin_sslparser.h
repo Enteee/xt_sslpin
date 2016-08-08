@@ -61,8 +61,8 @@ struct sslparser_ctx {
 
     /* Callbacks */
     struct {
-      sslparser_hash_cb     cert_fingerprint;
-      void *                cert_fingerprint_data;
+      sslparser_hash_cb     cert_finger_print;
+      void *                cert_finger_print_data;
 
 #define SSLPARSER_CTX_REGISTER_CALLBACK(ctx, name, callback, data)                \
     ctx->cb.name = callback;                                                      \
@@ -373,8 +373,8 @@ state50_finger_print_certificate:
             );
             
             // callback
-            if(state->cb.cert_fingerprint){
-                state->cb.cert_fingerprint(state->hash.val, state->cb.cert_fingerprint_data);
+            if(state->cb.cert_finger_print){
+                state->cb.cert_finger_print(state->hash.val, state->cb.cert_finger_print_data);
             }
 
             data += state->cert_remain - 1;

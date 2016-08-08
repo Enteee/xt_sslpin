@@ -144,7 +144,8 @@ static bool sslpin_connstate_cache_init(struct crypto_shash * const tfm)
         goto err_parserctx;
     }
     
-    sslpin_parserctx_hash_desc_cache = kmem_cache_create("xt_sslpin_parser_hash_desc", sizeof(struct shash_desc) + crypto_shash_descsize(tfm), 0, 0, NULL);
+    sslpin_parserctx_hash_desc_cache = kmem_cache_create("xt_sslpin_parser_hash_desc", 
+        sizeof(struct shash_desc) + crypto_shash_descsize(tfm), 0, 0, NULL);
     if (unlikely(!sslpin_parserctx_hash_desc_cache)) {
         goto err_parserctx_hash_desc;
     }

@@ -28,7 +28,7 @@
 /* parameter definitions */
 static const struct option sslpin_mt_opts[] = {
     { .name = "debug",      .has_arg = false,   .val = 'd' },
-    { .name = "name",       .has_arg = true,   .val = 'n' },
+    { .name = "fpl",        .has_arg = true,    .val = 'f' },
     { NULL },
 };
 
@@ -48,7 +48,8 @@ static void sslpin_mt_help(void)
 {
     printf(
         "sslpin match options:\n"
-        "    --debug      verbose mode (see kernel log)\n"
+        " [!] --fpl id     finger print list id\n"
+        "     --debug      verbose mode (see kernel log)\n"
         "\n"
     );
 }
@@ -61,15 +62,20 @@ static int sslpin_mt_parse(int c, char **argv, int invert, unsigned int *flags, 
     struct sslpin_mtruleinfo *mtruleinfo = (struct sslpin_mtruleinfo*)(*match)->data;
 
     switch (c) {
-        case 'n':
+        case 'f':
             if (*flags) {
-                xtables_error(PARAMETER_PROBLEM, "sslpin: --name can only be specified once");
+                xtables_error(PARAMETER_PROBLEM, "sslpin: --fpl can only be specified once");
+                return -1;
             }
-            mtruleinfo->name = optarg;
+            mtruleinfo->fpl_id = strtol(optarg, NULL, 10);
+            if(mtruleinfo->fpl_id <= 0){
+                xtables_error(PARAMETER_PROBLEM, "sslpin: --fpl invalid id argument");
+                return -1;
+            }
             if (invert) {
                 mtruleinfo->flags |= SSLPIN_RULE_FLAG_INVERT;
             }
-            *flags = 1;  // name set 
+            *flags = 1;  // id set 
             break;
         case 'd':
             mtruleinfo->flags |= SSLPIN_RULE_FLAG_DEBUG;
@@ -86,7 +92,7 @@ static int sslpin_mt_parse(int c, char **argv, int invert, unsigned int *flags, 
 static void sslpin_mt_check(unsigned int flags)
 {
     if (flags == 0) {
-        xtables_error(PARAMETER_PROBLEM, "sslpin: must specify a name");
+        xtables_error(PARAMETER_PROBLEM, "sslpin: must specify a finger print list");
     }
 }
 
@@ -104,7 +110,7 @@ static void sslpin_mt_print(const void *entry, const struct xt_entry_match *matc
     if (mtruleinfo->flags & SSLPIN_RULE_FLAG_INVERT) {
         printf(" !");
     }
-    printf(" %s", mtruleinfo->name);
+    printf(" %d", mtruleinfo->fpl_id);
 }
 
 
@@ -119,7 +125,7 @@ static void sslpin_mt_save(const void *entry, const struct xt_entry_match *match
     if (mtruleinfo->flags & SSLPIN_RULE_FLAG_INVERT) {
         printf(" !");
     }
-    printf(" %s", mtruleinfo->name);
+    printf(" %d", mtruleinfo->fpl_id);
 }
 
 
