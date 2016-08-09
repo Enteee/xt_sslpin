@@ -132,24 +132,23 @@ static int sslpin_remove_cert_finger_print(finger_print* fp, int mask) {
 
 static ssize_t sslpin_read_finger_print(const char* buf, size_t count, sslpin_read_finger_print_cb cb, int mask) {
     finger_print fp;
-    const char* buf_ptr = buf;
-    const char* buf_end = buf_ptr + count; 
+    const char* buf_end = buf + count; 
 
     // read finger prints
-    while(buf_ptr + sizeof(*fp) < buf_end){
-        int ret = hex2bin(fp, buf_ptr, sizeof(*fp));
+    while(buf + sizeof(*fp) < buf_end){
+        int ret = hex2bin(fp, buf, sizeof(fp));
         if(ret){
-            pr_err("invalid finger print hex representation: %s\n", buf_ptr);
+            pr_err("invalid finger print hex representation: %s\n", buf);
             goto err_invalid_hex_repr;
         }
 
         cb(&fp, mask);
-        buf_ptr += sizeof(*fp); // next
+        buf += sizeof(fp); // next
     }
     return count;
 
 err_invalid_hex_repr:
-    return buf_ptr - buf;
+    return count;
 }
 
 static ssize_t add_sslpin_cert_finger_prints(struct kobject* kobj, struct kobj_attribute* attr, const char* buf,
