@@ -37,7 +37,7 @@ struct cert_finger_print {
 struct cert_finger_print_list {
 #define DEF_CERT_FINGER_PRINT_LIST(id) {                                                \
   .name = STR(id),                                                                      \
-  .mask = 1 << id,                                                                      \
+  .mask = 1 << (id - 1),                                                                \
   .add = __ATTR(                                                                        \
       fpl_ ## id ## _add,                                                               \
       S_IWUSR | S_IRUGO,                                                                \
