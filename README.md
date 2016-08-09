@@ -1,11 +1,10 @@
-## NAME
-
-xt_sslpin - netfilter/xtables module: match SSL/TLS certificate public key (pinning)
+# xt_sslpin 
+_netfilter/xtables module: match SSL/TLS certificate finger prints_
 
 
 ## SYNOPSIS
 
-    iptables -I <chain> .. -m sslpin [!] --pubkey <alg>:<pubkey-hex> [--debug] ..
+    iptables -I <chain> .. -m sslpin [!] --fpl <finger print list id> [--debug] ..
 
 
 ## DESCRIPTION
@@ -20,10 +19,19 @@ xt_sslpin will only validate the public key (with minimal performance impact), a
 ## EXAMPLE
 
     iptables -I INPUT -m conntrack --ctstate ESTABLISHED -p tcp --sport 443 \
-        -m sslpin --debug --pubkey rsa:00000000000000000000000000000000000000000000000000000000000000 \
+        -m sslpin --debug --fpl 1 \
         -j DROP
 
 ## INSTALLATION
+
+Prerequisites
+
+* linux kernel > 3.7, check ```$ uname -r```
+* gcc
+* git
+* iptables-dev
+
+then:
 
     git clone https://github.com/Enteee/xt_sslpin.git
     cd xt_sslpin

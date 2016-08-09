@@ -22,7 +22,6 @@
 #include <string.h>
 
 #include "xt_sslpin.h"
-#include "hexutils.h"
 
 
 /* parameter definitions */

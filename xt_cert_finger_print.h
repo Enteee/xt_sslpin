@@ -89,10 +89,15 @@ static int sslpin_add_cert_finger_print(finger_print* fp, int mask) {
             ret = ENOMEM;
             goto out;
         }
-        memcpy(cfp->fp, *fp, SSLPIN_FINGER_PRINT_SIZE);
+        memcpy(cfp->fp, *fp, sizeof(*fp));
         hlist_add_head(&cfp->next, &sslpin_cert_finger_prints[FINGER_PRINT_BUCKET(*cfp->fp)]);
     }
     cfp->mask |= mask;
+    
+    pr_info("added new finger print (mask = %x, fp = ", mask);
+    printhex(*fp, sizeof(*fp));
+    pr_info(")\n");
+
 
 out:
     spin_unlock_bh(&sslpin_mt_lock);

@@ -56,7 +56,7 @@ static void printhex(const __u8* bytes, __u32 len) {
         *hexp = 0;
 
 #ifdef __KERNEL__
-        printk("%s", hexbuf);
+        pr_info("%s", hexbuf);
 #else
         printf("%s", hexbuf);
 #endif

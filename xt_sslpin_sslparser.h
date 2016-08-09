@@ -348,29 +348,6 @@ state50_finger_print_certificate:
                 invalid("hash final failed\n");
             }
 
-            debug("finger print: %hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx\n",
-                  state->hash.val[0],
-                  state->hash.val[1],
-                  state->hash.val[2],
-                  state->hash.val[3],
-                  state->hash.val[4],
-                  state->hash.val[5],
-                  state->hash.val[6],
-                  state->hash.val[7],
-                  state->hash.val[8],
-                  state->hash.val[9],
-                  state->hash.val[10],
-                  state->hash.val[11],
-                  state->hash.val[12],
-                  state->hash.val[13],
-                  state->hash.val[14],
-                  state->hash.val[15],
-                  state->hash.val[16],
-                  state->hash.val[17],
-                  state->hash.val[18],
-                  state->hash.val[19]
-                 );
-
             // callback
             if (state->cb.cert_finger_print) {
                 state->cb.cert_finger_print(state->hash.val, state->cb.cert_finger_print_data);

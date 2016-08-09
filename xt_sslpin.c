@@ -165,10 +165,13 @@ void cert_finger_print_cb(const __u8* const val, void* data) {
     finger_print* fp = (finger_print*)val;
     struct sslpin_connstate* state = (struct sslpin_connstate*) data;
     struct cert_finger_print* cfp = sslpin_get_cert_finger_print(fp);
+
     if (cfp) {
         // match found!
         state->cert_finger_print_mask |= cfp->mask;
-        pr_info("xt_sslpin: cert finger print matched");
+        pr_info("xt_sslpin: cert finger print matched (mask = %x, fp = ", cfp->mask);
+        printhex(*fp, sizeof(*fp));
+        pr_info(")\n");
     }
 }
 
