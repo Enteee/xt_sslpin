@@ -19,10 +19,11 @@
 
 #define SSLPIN_CERT_FINGER_PRINTS_HASH_BITS 10
 #define SSLPIN_FINGER_PRINT_SIZE 20 // 20*8 = 160bit = sizeof(sha1)
+#define SSLPIN_FINGER_PRINT_STR_SIZE 40 // 2 * SSLPIN_FINGER_PRINT_SIZE
 
 
 typedef __u8 finger_print[SSLPIN_FINGER_PRINT_SIZE];
-typedef char finger_print_str[SSLPIN_FINGER_PRINT_SIZE * 2 + 1]; // string representation of a finger print
+typedef char finger_print_str[SSLPIN_FINGER_PRINT_STR_SIZE + 1]; // string representation of a finger print
 
 typedef int (*sslpin_read_finger_print_cb)(finger_print* fp, int mask);
 
@@ -135,15 +136,15 @@ static ssize_t sslpin_read_finger_print(const char* buf, size_t count, sslpin_re
     const char* buf_end = buf + count; 
 
     // read finger prints
-    while(buf + sizeof(finger_print_str) - 1 <= buf_end){
-        int ret = hex2bin(fp, buf, sizeof(finger_print_str) - 1);
+    while(buf + SSLPIN_FINGER_PRINT_STR_SIZE <= buf_end){
+        int ret = hex2bin(fp, buf, SSLPIN_FINGER_PRINT_STR_SIZE);
         if(ret){
-            pr_err("invalid finger print hex representation: %." STR(SSLPIN_FINGER_PRINT_SIZE) "s\n", buf);
+            pr_err("invalid finger print hex representation: %." STR(SSLPIN_FINGER_PRINT_STR_SIZE) "s\n", buf);
             goto err_invalid_hex_repr;
         }
 
         cb(&fp, mask);
-        buf += sizeof(finger_print_str) - 1; // next
+        buf += SSLPIN_FINGER_PRINT_STR_SIZE; // next
     }
     return count;
 
