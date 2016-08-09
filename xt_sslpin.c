@@ -14,8 +14,6 @@
  * the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#include <string.h>
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -59,7 +57,6 @@ static struct kobject *             sslpin_kobj                 __read_mostly;
 static int __init sslpin_mt_init(void)
 {
     int ret;
-    size_t i;
     
     pr_info("xt_sslpin " XT_SSLPIN_VERSION " (SSL/TLS pinning)\n");
     
@@ -108,7 +105,7 @@ err_xt_register_match:
 err_conntrack_register_notifier:
     sslpin_connstate_cache_destroy();
 err_connstate_cache_init:
-    kmem_cache_destroy(cert_finger_print_cache);
+    sslpin_cert_finger_print_destroy();
 err_cert_finger_print:
     kobject_put(sslpin_kobj);
 err_create_kobj:
@@ -134,8 +131,7 @@ static void __exit sslpin_mt_exit(void){
 /* module instance/rule destroy
  * when a rule is added or removed, sslpin_mt_check() will first be called once for each remaining rule,
  * then sslpin_mt_destroy() will be called */
-static void sslpin_mt_destroy(const struct xt_mtdtor_param *par)
-{
+static void sslpin_mt_destroy(const struct xt_mtdtor_param *par){
     spin_lock_bh(&sslpin_mt_lock);
     sslpin_mt_checked_after_destroy = false;
     spin_unlock_bh(&sslpin_mt_lock);
@@ -143,12 +139,11 @@ static void sslpin_mt_destroy(const struct xt_mtdtor_param *par)
 
 
 /* validate options passed in from usermode */
-static int sslpin_mt_check(const struct xt_mtchk_param *par)
-{
+static int sslpin_mt_check(const struct xt_mtchk_param *par) {
     struct sslpin_mtruleinfo *mtruleinfo = par->matchinfo;
     /* sanity check input options */
     if(mtruleinfo->fpl_id <= 0 || mtruleinfo->fpl_id > SSLPIN_FINGER_PRINT_LIST_SIZE){
-        pr_err("invalid finger print list id\n");
+        pr_err("invalid finger print list id: %d\n", mtruleinfo->fpl_id);
         return EINVAL;
     }
 
@@ -168,7 +163,14 @@ static int sslpin_mt_check(const struct xt_mtchk_param *par)
 }
 
 void cert_finger_print_cb(const __u8 * const val, void * data){
-    pr_info("xt_sslpin: cert_finger_print_cb called!");
+    finger_print* fp = (finger_print*)val;
+    struct sslpin_connstate* state = (struct sslpin_connstate*) data;
+    struct cert_finger_print* cfp = sslpin_get_cert_finger_print(fp);
+    if(cfp){
+        // match found!
+        state->cert_finger_print_mask |= cfp->mask;
+        pr_info("xt_sslpin: cert finger print matched");
+    }
 }
 
 /*
@@ -435,7 +437,7 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
                 return false;
             }
             /* register callback */
-            SSLPARSER_CTX_REGISTER_CALLBACK(state->parser_ctx, cert_finger_print, cert_finger_print_cb, NULL);
+            SSLPARSER_CTX_REGISTER_CALLBACK(state->parser_ctx, cert_finger_print, cert_finger_print_cb, state);
         }
 
         /* non-paged data */
@@ -488,7 +490,13 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
 
     /* check if matched */
-    matched = likely(state->parser_ctx) && sslpin_match_certificate(mtruleinfo, state->parser_ctx);
+    matched = 
+        likely(state->parser_ctx)
+        && (
+            !(state->cert_finger_print_mask & 1 << mtruleinfo->fpl_id)
+            != // XOR
+            !(mtruleinfo->flags & SSLPIN_RULE_FLAG_INVERT)
+        );
 
     if (unlikely(debug_enabled)) {
         pr_info("xt_sslpin: rule %smatched\n", matched ? "" : "not ");
