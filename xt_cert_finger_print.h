@@ -98,10 +98,10 @@ static int sslpin_add_cert_finger_print(finger_print* fp, int mask) {
         }
         memcpy(cfp->fp, *fp, sizeof(*fp));
         hlist_add_head(&cfp->next, &sslpin_cert_finger_prints[FINGER_PRINT_BUCKET(*cfp->fp)]);
+
+        pr_info("xt_sslpin: added finger print (mask = %x, fp = %s)\n", mask, fp_str);
     }
     cfp->mask |= mask;
-
-    pr_info("xt_sslpin: added finger print (mask = %x, fp = %s)\n", mask, fp_str);
 
 
 out:
@@ -112,8 +112,11 @@ out:
 static int sslpin_remove_cert_finger_print(finger_print* fp, int mask) {
     int ret = EINVAL; // default: finger print not found
     struct cert_finger_print* cfp;
+    finger_print_str fp_str = {0}; 
+    bin2hex(fp_str, *fp, sizeof(*fp));
 
     spin_lock_bh(&sslpin_mt_lock);
+
     cfp = sslpin_get_cert_finger_print(fp);
     if (cfp) {
         // found: unmask
@@ -125,6 +128,8 @@ static int sslpin_remove_cert_finger_print(finger_print* fp, int mask) {
         }
 
         ret = 0;
+
+        pr_info("xt_sslpin: removed finger print (mask = %x, fp = %s)\n", mask, fp_str);
     }
 
     spin_unlock_bh(&sslpin_mt_lock);
