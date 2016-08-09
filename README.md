@@ -25,7 +25,7 @@ xt_sslpin will only validate the public key (with minimal performance impact), a
 
 ## INSTALLATION
 
-    git clone git://github.com/fredburger/xt_sslpin
+    git clone https://github.com/Enteee/xt_sslpin.git
     cd xt_sslpin
     sudo apt-get install iptables-dev # xtables.h
 
@@ -112,10 +112,15 @@ and create a new cf_conn. Thus, our per-conn state transitions are simply new->o
 * Restrict TCP Options / TCP stack passthrough
 * IPv6 support
 
+## Acknowledgment
+
+This module is a fork from [xt_sslpin by fredburger (github.com/fredburger)](https://github.com/fredburger/xt_sslpin).
+
+Thank you!
 
 ## LICENSE
 
-xt_sslpin is Copyright (C) 2010-2013 fredburger (github.com/fredburger).
+xt_sslpin is Copyright (C) 2016 Enteee (duckpond.ch).
 
 This program is free software; you can redistribute it and/or modify it under the terms of the
 GNU General Public License as published by the Free Software Foundation; version 2 of the License.
@@ -126,4 +131,3 @@ See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with this program; if not, write to
 the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
-

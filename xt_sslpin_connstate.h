@@ -1,7 +1,7 @@
 /*
  * xt_sslpin_connstate.h
  *
- * Copyright (C) 2010-2013 fredburger (github.com/fredburger)
+ * Copyright (C) 2016 Enteee (duckpond.ch)
  *
  * This program is free software; you can redistribute it and/or modify it under the terms of the
  * GNU General Public License as published by the Free Software Foundation; version 2 of the License.
@@ -132,30 +132,34 @@ static void sslpin_connstate_remove(struct sslpin_connstate *state)
 
 
 /* init conn tracking table */
-static bool sslpin_connstate_cache_init(struct crypto_shash * const tfm)
-{
+static int sslpin_connstate_cache_init(struct crypto_shash * const tfm){
+    int ret = 0;
     sslpin_connstate_cache = kmem_cache_create("xt_sslpin_connstate", sizeof(struct sslpin_connstate), 0, 0, NULL);
     if (unlikely(!sslpin_connstate_cache)) {
-        goto err;
+        ret = ENOMEM;
+        goto err_connstate;
     }
 
     sslpin_parserctx_cache = kmem_cache_create("xt_sslpin_parser", sizeof(struct sslparser_ctx), 0, 0, NULL);
     if (unlikely(!sslpin_parserctx_cache)) {
+        ret = ENOMEM;
         goto err_parserctx;
     }
     
     sslpin_parserctx_hash_desc_cache = kmem_cache_create("xt_sslpin_parser_hash_desc", 
         sizeof(struct shash_desc) + crypto_shash_descsize(tfm), 0, 0, NULL);
     if (unlikely(!sslpin_parserctx_hash_desc_cache)) {
+        ret = ENOMEM;
         goto err_parserctx_hash_desc;
     }
 
     sslpin_parserctx_hash_val_cache = kmem_cache_create("xt_sslpin_parser_hash_val", crypto_shash_digestsize(tfm), 0, 0, NULL);
     if (unlikely(!sslpin_parserctx_hash_val_cache)) {
+        ret = ENOMEM;
         goto err_parserctx_hash_val;
     }
 
-    return true;
+    return ret;
 
 err_parserctx_hash_val:
     kmem_cache_destroy(sslpin_parserctx_hash_desc_cache);
@@ -163,8 +167,8 @@ err_parserctx_hash_desc:
     kmem_cache_destroy(sslpin_parserctx_cache);
 err_parserctx:
     kmem_cache_destroy(sslpin_connstate_cache);
-err:
-    return false;
+err_connstate:
+    return ret;
 }
 
 
