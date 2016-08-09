@@ -135,7 +135,7 @@ static ssize_t sslpin_read_finger_print(const char* buf, size_t count, sslpin_re
     const char* buf_end = buf + count; 
 
     // read finger prints
-    while(buf + sizeof(*fp) < buf_end){
+    while(buf + sizeof(fp) <= buf_end){
         int ret = hex2bin(fp, buf, sizeof(fp));
         if(ret){
             pr_err("invalid finger print hex representation: %s\n", buf);
