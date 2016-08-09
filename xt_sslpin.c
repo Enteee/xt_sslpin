@@ -14,6 +14,7 @@
  * the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -35,6 +36,8 @@
 #include <linux/netfilter/nf_conntrack_common.h>
 #include <net/netfilter/nf_conntrack_ecache.h>
 
+#include "hexutils.h"
+
 #include "xt_sslpin.h"
 #include "ipfragment.h"
 #include "xt_globals.h"
@@ -46,6 +49,10 @@ MODULE_AUTHOR("Enteee (duckpond.ch) ");
 MODULE_DESCRIPTION("xtables: match SSL/TLS certificate finger prints");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("ipt_sslpin");
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,7,0)
+    #error "Kernel not supported, must be at least" KERNEL_VERSION(3,7,0)
+#endif
 
 /* forward decls */
 static struct nf_ct_event_notifier  sslpin_conntrack_notifier;

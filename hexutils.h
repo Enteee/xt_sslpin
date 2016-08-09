@@ -1,5 +1,5 @@
 /*
- * xt_globals.h
+ * hexutils.h
  *
  * Copyright (C) 2016 Enteee (duckpond.ch)
  *
@@ -14,13 +14,27 @@
  * the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef _LINUX_NETFILTER_XT_SSLPIN_GLOBALS_H
-#define _LINUX_NETFILTER_XT_SSLPIN_GLOBALS_H
-
-static DEFINE_SPINLOCK(sslpin_mt_lock);
-static bool                   sslpin_mt_has_debug_rules       __read_mostly  = false;
-static bool                   sslpin_mt_checked_after_destroy = false;
-static struct crypto_shash*   sslpin_hash                     __read_mostly;
+#ifndef _LINUX_NETFILTER_XT_SSLPIN_HEXUTILS_H
+#define _LINUX_NETFILTER_XT_SSLPIN_HEXUTILS_H
 
 
-#endif /* _LINUX_NETFILTER_XT_SSLPIN_GLOBALS_H */
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(3,17,0)
+
+/**
+ * bin2hex - convert binary data to an ascii hexadecimal string
+ * @dst: ascii hexadecimal result
+ * @src: binary data
+ * @count: binary data length
+ */
+char *bin2hex(char *dst, const void *src, size_t count)
+{
+    const unsigned char *_src = src;
+
+    while (count--)
+        dst = hex_byte_pack(dst, *_src++);
+    return dst;
+}
+
+#endif
+
+#endif /* _LINUX_NETFILTER_XT_SSLPIN_HEXUTILS_H */
