@@ -36,7 +36,6 @@
 #include <net/netfilter/nf_conntrack_ecache.h>
 
 #include "xt_sslpin.h"
-#include "hexutils.h"
 #include "ipfragment.h"
 #include "xt_globals.h"
 #include "xt_sslpin_connstate.h"
@@ -168,10 +167,11 @@ void cert_finger_print_cb(const __u8* const val, void* data) {
 
     if (cfp) {
         // match found!
+        finger_print_str fp_str;
+        bin2hex(fp_str, fp, sizeof(*fp));
+        pr_info("xt_sslpin: cert finger print matched (mask = %x, fp = %s)\n", cfp->mask, fp_str);
+
         state->cert_finger_print_mask |= cfp->mask;
-        pr_info("xt_sslpin: cert finger print matched (mask = %x, fp = ", cfp->mask);
-        printhex(*fp, sizeof(*fp));
-        pr_info(")\n");
     }
 }
 

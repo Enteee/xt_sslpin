@@ -22,7 +22,8 @@
 
 
 typedef __u8 finger_print[SSLPIN_FINGER_PRINT_SIZE];
-#define FINGER_PRINT_BUCKET(fp) ((size_t)fp) >> (sizeof(size_t) * 8 - HASH_BITS(sslpin_cert_finger_prints))
+typedef char finger_print_str[SSLPIN_FINGER_PRINT_SIZE + 1]; // string representation of a finger print
+
 typedef int (*sslpin_read_finger_print_cb)(finger_print* fp, int mask);
 
 
@@ -59,6 +60,7 @@ struct cert_finger_print_list {
 /* forward decls */
 static struct kmem_cache*   sslpin_cert_finger_print_cache      __read_mostly;
 DEFINE_HASHTABLE(sslpin_cert_finger_prints,          SSLPIN_CERT_FINGER_PRINTS_HASH_BITS);
+#define FINGER_PRINT_BUCKET(fp) ((size_t)fp) >> (sizeof(size_t) * 8 - HASH_BITS(sslpin_cert_finger_prints))
 
 static struct cert_finger_print* sslpin_get_cert_finger_print(finger_print* fp) {
     struct cert_finger_print* ret =  NULL;
@@ -78,7 +80,11 @@ out:
 static int sslpin_add_cert_finger_print(finger_print* fp, int mask) {
     int ret = 0;
     struct cert_finger_print* cfp;
+    finger_print_str fp_str; 
+    bin2hex(fp_str, fp, sizeof(*fp));
+
     spin_lock_bh(&sslpin_mt_lock);
+
     cfp = sslpin_get_cert_finger_print(fp);
     if (!cfp) {
         // not found: add new finger print to hashmap
@@ -93,10 +99,8 @@ static int sslpin_add_cert_finger_print(finger_print* fp, int mask) {
         hlist_add_head(&cfp->next, &sslpin_cert_finger_prints[FINGER_PRINT_BUCKET(*cfp->fp)]);
     }
     cfp->mask |= mask;
-    
-    pr_info("added new finger print (mask = %x, fp = ", mask);
-    printhex(*fp, sizeof(*fp));
-    pr_info(")\n");
+
+    pr_info("xt_sslpin: added finger print (mask = %x, fp = %s)\n", mask, fp_str);
 
 
 out:
@@ -127,27 +131,25 @@ static int sslpin_remove_cert_finger_print(finger_print* fp, int mask) {
 }
 
 static ssize_t sslpin_read_finger_print(const char* buf, size_t count, sslpin_read_finger_print_cb cb, int mask) {
-    size_t i = 0;
-    finger_print fp = {0};
-    size_t fp_pos = 0;
+    finger_print fp;
+    const char* buf_ptr = buf;
+    const char* buf_end = buf_ptr + count; 
 
-    for (i = 0; i < count ; ++i) {
-        __u8 val = hexc2int(buf[i]);
-
-        if (val > 15) {
-            pr_err("skipping invalid hex char in certificate finger print: %c\n", buf[i]);
-            continue;
+    // read finger prints
+    while(buf_ptr + sizeof(*fp) < buf_end){
+        int ret = hex2bin(fp, buf_ptr, sizeof(*fp));
+        if(ret){
+            pr_err("invalid finger print hex representation: %s\n", buf_ptr);
+            goto err_invalid_hex_repr;
         }
 
-        fp[fp_pos] = val;
-        fp_pos = (fp_pos + 1) % sizeof(fp);
-        if (!fp_pos) {
-            if (cb(&fp, mask)) {
-                return i;
-            }
-        }
+        cb(&fp, mask);
+        buf_ptr += sizeof(*fp); // next
     }
-    return i;
+    return count;
+
+err_invalid_hex_repr:
+    return buf_ptr - buf;
 }
 
 static ssize_t add_sslpin_cert_finger_prints(struct kobject* kobj, struct kobj_attribute* attr, const char* buf,
