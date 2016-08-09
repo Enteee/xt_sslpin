@@ -1,0 +1,38 @@
+# GENERAL STYLE
+# 1tbs style is defined in coding guidelines, but google fits the current style better
+--style=google
+# Fix line ends
+--lineend=linux
+# No backup files (.orig), we have git
+--suffix=none
+# Recursive
+# --recursive
+
+# PADDING
+# Pad operators ( + - / * )
+--pad-oper
+# Padding between a header (if, for, while, etc.) and parenthesis.
+--pad-header
+# Unpad the rest
+--unpad-paren
+# Add brackets to one line statements (if, for, while, etc.)
+--add-brackets
+# break lines when they are longer than 120 characters
+--max-code-length=120
+--max-instatement-indent=80
+# remove whitespace in angle brackets of template definitions (C++)
+--close-templates
+
+# INDENDATION
+# Use 4 spaces for indendation
+-s4
+# Convert tabs to spaces
+--convert-tabs
+# Indent case statements in switches
+--indent-switches
+
+# ALIGNMENT
+# Put asterisks to the type. eg. char* a
+--align-pointer=type
+# Put references to the type. eg. int& a
+--align-reference=type

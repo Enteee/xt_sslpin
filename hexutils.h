@@ -22,23 +22,27 @@
 
 
 /* hex char to int, or 16 on invalid char - branching (no lookup table) */
-static inline __u8 hexc2int(const char c)
-{
-    if ((c <= '9') && (c >= '0')) { return c - '0'; }
-    if ((c >= 'a') && (c <= 'f')) { return c - 'a' + 10; }
-    if ((c >= 'A') && (c <= 'Z')) { return c - 'A' + 10; }
+static inline __u8 hexc2int(const char c) {
+    if ((c <= '9') && (c >= '0')) {
+        return c - '0';
+    }
+    if ((c >= 'a') && (c <= 'f')) {
+        return c - 'a' + 10;
+    }
+    if ((c >= 'A') && (c <= 'Z')) {
+        return c - 'A' + 10;
+    }
     return 16;
 }
 
 
 /* print byte array as hex */
-static void printhex(const __u8 *bytes, __u32 len)
-{
+static void printhex(const __u8* bytes, __u32 len) {
     const char hextab[] = "0123456789abcdef";
-    const __u8 * const bytes_end = bytes + len;
+    const __u8* const bytes_end = bytes + len;
     char hexbuf[512 - 1];
-    char *hexp;
-    const __u8 *bytes_max;
+    char* hexp;
+    const __u8* bytes_max;
 
     while (bytes < bytes_end) {
         bytes_max = bytes + ((sizeof(hexbuf) - 1) >> 1);
@@ -51,11 +55,11 @@ static void printhex(const __u8 *bytes, __u32 len)
         }
         *hexp = 0;
 
-        #ifdef __KERNEL__
-            printk("%s", hexbuf);
-        #else
-            printf("%s", hexbuf);
-        #endif
+#ifdef __KERNEL__
+        printk("%s", hexbuf);
+#else
+        printf("%s", hexbuf);
+#endif
     }
 }
 

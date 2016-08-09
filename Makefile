@@ -14,6 +14,8 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
 
+TOPLEVEL := $(shell git rev-parse --show-toplevel)
+
 # Detect libdir: /lib vs. /lib64
 libdir.x86_64 = /lib64
 libdir.i686 = /lib
@@ -76,3 +78,6 @@ clean:
 
 log_install:
 	@echo "\nMODULES_DIR: $(MODULES_DIR)\nKERNEL_DIR:  $(KERNEL_DIR)\nXTABLES_DIR: $(XTABLES_DIR)\n"
+
+format:
+	find $(TOPLEVEL) -type f -name '*.[ch]' | xargs astyle --options=$(TOPLEVEL)/.astylerc

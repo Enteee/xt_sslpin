@@ -48,7 +48,7 @@ struct sslpin_mtruleinfo {
 #define SSLPIN_MTRULEINFO_KERN_SIZE      XT_ALIGN(sizeof(struct sslpin_mtruleinfo))
 #define SSLPIN_MTRULEINFO_USER_SIZE      offsetof(struct sslpin_mtruleinfo, kernpriv)
 
-static inline bool sslpin_debug_enabled(const struct sslpin_mtruleinfo *mtruleinfo) {
+static inline bool sslpin_debug_enabled(const struct sslpin_mtruleinfo* mtruleinfo) {
     return mtruleinfo->flags & SSLPIN_RULE_FLAG_DEBUG;
 }
 

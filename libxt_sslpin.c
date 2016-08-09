@@ -38,14 +38,13 @@ static const struct option sslpin_mt_opts[] = {
 static void sslpin_mt_init(struct xt_entry_match *match)
 {
     struct sslpin_mtruleinfo *mtruleinfo = (struct sslpin_mtruleinfo*)(match->data);
-    
+
 }
 */
 
 
 /* invoked by iptables -m sslpin -h */
-static void sslpin_mt_help(void)
-{
+static void sslpin_mt_help(void) {
     printf(
         "sslpin match options:\n"
         " [!] --fpl id     finger print list id\n"
@@ -56,10 +55,9 @@ static void sslpin_mt_help(void)
 
 
 /* parse options */
-static int sslpin_mt_parse(int c, char **argv, int invert, unsigned int *flags, const void *entry,
-            struct xt_entry_match **match)
-{
-    struct sslpin_mtruleinfo *mtruleinfo = (struct sslpin_mtruleinfo*)(*match)->data;
+static int sslpin_mt_parse(int c, char** argv, int invert, unsigned int* flags, const void* entry,
+                           struct xt_entry_match** match) {
+    struct sslpin_mtruleinfo* mtruleinfo = (struct sslpin_mtruleinfo*)(*match)->data;
 
     switch (c) {
         case 'f':
@@ -68,14 +66,14 @@ static int sslpin_mt_parse(int c, char **argv, int invert, unsigned int *flags, 
                 return -1;
             }
             mtruleinfo->fpl_id = strtol(optarg, NULL, 10);
-            if(mtruleinfo->fpl_id <= 0){
+            if (mtruleinfo->fpl_id <= 0) {
                 xtables_error(PARAMETER_PROBLEM, "sslpin: --fpl invalid id argument");
                 return -1;
             }
             if (invert) {
                 mtruleinfo->flags |= SSLPIN_RULE_FLAG_INVERT;
             }
-            *flags = 1;  // id set 
+            *flags = 1;  // id set
             break;
         case 'd':
             mtruleinfo->flags |= SSLPIN_RULE_FLAG_DEBUG;
@@ -89,8 +87,7 @@ static int sslpin_mt_parse(int c, char **argv, int invert, unsigned int *flags, 
 
 
 /* check options after parsing */
-static void sslpin_mt_check(unsigned int flags)
-{
+static void sslpin_mt_check(unsigned int flags) {
     if (flags == 0) {
         xtables_error(PARAMETER_PROBLEM, "sslpin: must specify a finger print list");
     }
@@ -98,9 +95,8 @@ static void sslpin_mt_check(unsigned int flags)
 
 
 /* invoked for iptables --list;  print options in human-friendly format */
-static void sslpin_mt_print(const void *entry, const struct xt_entry_match *match, int numeric)
-{
-    struct sslpin_mtruleinfo *mtruleinfo = (struct sslpin_mtruleinfo*)(match->data);
+static void sslpin_mt_print(const void* entry, const struct xt_entry_match* match, int numeric) {
+    struct sslpin_mtruleinfo* mtruleinfo = (struct sslpin_mtruleinfo*)(match->data);
 
     printf(" sslpin:");
 
@@ -115,9 +111,8 @@ static void sslpin_mt_print(const void *entry, const struct xt_entry_match *matc
 
 
 /* invoked for iptables-save and iptables --list-rules;  print options in exact format */
-static void sslpin_mt_save(const void *entry, const struct xt_entry_match *match)
-{
-    struct sslpin_mtruleinfo *mtruleinfo = (struct sslpin_mtruleinfo*)(match->data);
+static void sslpin_mt_save(const void* entry, const struct xt_entry_match* match) {
+    struct sslpin_mtruleinfo* mtruleinfo = (struct sslpin_mtruleinfo*)(match->data);
 
     if (mtruleinfo->flags & SSLPIN_RULE_FLAG_DEBUG) {
         printf(" --debug");
@@ -148,8 +143,7 @@ static struct xtables_match sslpin_mt_reg = {
 
 
 /* init function (module loaded by iptables) */
-void _init(void)
-{
+void _init(void) {
     xtables_register_match(&sslpin_mt_reg);
 }
 

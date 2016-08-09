@@ -43,45 +43,44 @@
 #include "xt_sslpin_sslparser.h"
 #include "xt_cert_finger_print.h"
 
-MODULE_AUTHOR       ( "Enteee (duckpond.ch) ");
-MODULE_DESCRIPTION  ( "xtables: match SSL/TLS certificate finger prints" );
-MODULE_LICENSE      ( "GPL" );
-MODULE_ALIAS        ( "ipt_sslpin" );
+MODULE_AUTHOR("Enteee (duckpond.ch) ");
+MODULE_DESCRIPTION("xtables: match SSL/TLS certificate finger prints");
+MODULE_LICENSE("GPL");
+MODULE_ALIAS("ipt_sslpin");
 
 /* forward decls */
 static struct nf_ct_event_notifier  sslpin_conntrack_notifier;
 static struct xt_match              sslpin_mt_reg               __read_mostly;
-static struct kobject *             sslpin_kobj                 __read_mostly;
+static struct kobject*              sslpin_kobj                 __read_mostly;
 
 /* module init function */
-static int __init sslpin_mt_init(void)
-{
+static int __init sslpin_mt_init(void) {
     int ret;
-    
+
     pr_info("xt_sslpin " XT_SSLPIN_VERSION " (SSL/TLS pinning)\n");
-    
+
     sslpin_hash = crypto_alloc_shash(XT_SSLPIN_HASH_ALGO, 0, CRYPTO_ALG_TYPE_SHASH);
-    if(IS_ERR(sslpin_hash)){
+    if (IS_ERR(sslpin_hash)) {
         pr_err("xt_sslpin: coult not allocate hashing metadata\n");
         ret = PTR_ERR(sslpin_hash);
         goto err_crypto_alloc_shash;
     }
 
     sslpin_kobj = kobject_create_and_add(XT_SSLPIN_KOBJ_NAME, kernel_kobj);
-    if(!sslpin_kobj){
+    if (!sslpin_kobj) {
         pr_err("xt_sslpin: could not create kobject " XT_SSLPIN_KOBJ_NAME "\n");
         ret = EINVAL;
         goto err_create_kobj;
     }
 
     ret = sslpin_cert_finger_print_init(sslpin_kobj);
-    if(ret){
+    if (ret) {
         pr_err("xt_sslpin: could not initialize cert finger print lists");
         goto err_cert_finger_print;
     }
 
     ret = sslpin_connstate_cache_init(sslpin_hash);
-    if(ret){
+    if (ret) {
         pr_err("xt_sslpin: could not allocate sslpin_connstate cache\n");
         goto err_connstate_cache_init;
     }
@@ -116,7 +115,7 @@ err_crypto_alloc_shash:
 }
 
 /* module exit function */
-static void __exit sslpin_mt_exit(void){
+static void __exit sslpin_mt_exit(void) {
     xt_unregister_match(&sslpin_mt_reg);
     nf_conntrack_unregister_notifier(&init_net, &sslpin_conntrack_notifier);
     sslpin_connstate_cache_destroy();
@@ -131,7 +130,7 @@ static void __exit sslpin_mt_exit(void){
 /* module instance/rule destroy
  * when a rule is added or removed, sslpin_mt_check() will first be called once for each remaining rule,
  * then sslpin_mt_destroy() will be called */
-static void sslpin_mt_destroy(const struct xt_mtdtor_param *par){
+static void sslpin_mt_destroy(const struct xt_mtdtor_param* par) {
     spin_lock_bh(&sslpin_mt_lock);
     sslpin_mt_checked_after_destroy = false;
     spin_unlock_bh(&sslpin_mt_lock);
@@ -139,10 +138,10 @@ static void sslpin_mt_destroy(const struct xt_mtdtor_param *par){
 
 
 /* validate options passed in from usermode */
-static int sslpin_mt_check(const struct xt_mtchk_param *par) {
-    struct sslpin_mtruleinfo *mtruleinfo = par->matchinfo;
+static int sslpin_mt_check(const struct xt_mtchk_param* par) {
+    struct sslpin_mtruleinfo* mtruleinfo = par->matchinfo;
     /* sanity check input options */
-    if(mtruleinfo->fpl_id <= 0 || mtruleinfo->fpl_id > SSLPIN_FINGER_PRINT_LIST_SIZE){
+    if (mtruleinfo->fpl_id <= 0 || mtruleinfo->fpl_id > SSLPIN_FINGER_PRINT_LIST_SIZE) {
         pr_err("invalid finger print list id: %d\n", mtruleinfo->fpl_id);
         return EINVAL;
     }
@@ -162,11 +161,11 @@ static int sslpin_mt_check(const struct xt_mtchk_param *par) {
     return 0;
 }
 
-void cert_finger_print_cb(const __u8 * const val, void * data){
+void cert_finger_print_cb(const __u8* const val, void* data) {
     finger_print* fp = (finger_print*)val;
     struct sslpin_connstate* state = (struct sslpin_connstate*) data;
     struct cert_finger_print* cfp = sslpin_get_cert_finger_print(fp);
-    if(cfp){
+    if (cfp) {
         // match found!
         state->cert_finger_print_mask |= cfp->mask;
         pr_info("xt_sslpin: cert finger print matched");
@@ -201,16 +200,15 @@ void cert_finger_print_cb(const __u8 * const val, void * data){
  *   - IPv6 support
  *   - Consider using the Linux ASN.1 compiler/decoder
  */
-static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
-{
-    const struct sslpin_mtruleinfo * const mtruleinfo = par->matchinfo;
+static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
+    const struct sslpin_mtruleinfo* const mtruleinfo = par->matchinfo;
     const bool debug_enabled = sslpin_debug_enabled(mtruleinfo);
-    const struct iphdr *ip;
-    const struct tcphdr *tcp;
-    struct sslpin_connstate *state;
+    const struct iphdr* ip;
+    const struct tcphdr* tcp;
+    struct sslpin_connstate* state;
     __u32 tcp_seq, data_len, nonpaged_len, i, num_frags;
-    __u8 *data;
-    skb_frag_t *frag;
+    __u8* data;
+    skb_frag_t* frag;
     int frag_size;
     sslparser_res_t res;
     bool matched;
@@ -233,7 +231,7 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
     spin_lock_bh(&sslpin_mt_lock);
 
     /* lookup sslpin_connstate for connection */
-    state = sslpin_connstate_find_or_init((struct nf_conn *)skb->nfct);
+    state = sslpin_connstate_find_or_init((struct nf_conn*)skb->nfct);
 
     if (unlikely(!state)) {
         spin_unlock_bh(&sslpin_mt_lock);
@@ -311,7 +309,7 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
             par->hotdrop = true;
             if (unlikely(debug_enabled)) {
                 pr_err("xt_sslpin: received SYN/ACK packet with data!? dropping packet"
-                    " (TCP Fast Open not current supported by xt_sslpin)\n");
+                       " (TCP Fast Open not current supported by xt_sslpin)\n");
             }
             return false;
         }
@@ -322,7 +320,7 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
             par->hotdrop = true;
             if (unlikely(debug_enabled)) {
                 pr_err("xt_sslpin: received SYN packet (without ACK)"
-                    " - dropping packet and marking connection as invalid\n");
+                       " - dropping packet and marking connection as invalid\n");
             }
             return false;
         }
@@ -336,14 +334,13 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
             par->hotdrop = true;
             if (unlikely(debug_enabled)) {
                 pr_err("xt_sslpin: received SYN/ACK for connection that has received data"
-                    " - dropping packet and marking connection as invalid\n");
+                       " - dropping packet and marking connection as invalid\n");
             }
             return false;
         }
 
         if (unlikely(debug_enabled && (state->state == SSLPIN_CONNSTATE_GOT_SYNACK))
-            && (tcp_seq != state->last_seq))
-        {
+                && (tcp_seq != state->last_seq)) {
             pr_info("xt_sslpin: received duplicate SYN/ACK with different seq\n");
         }
 
@@ -361,7 +358,7 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
         spin_unlock_bh(&sslpin_mt_lock);
         if (unlikely(debug_enabled)) {
             pr_err("xt_sslpin: SYN/ACK not seen for connection (already established when xt_sslpin was loaded)"
-                " - ignoring connection\n");
+                   " - ignoring connection\n");
         }
         return false;
     }
@@ -389,9 +386,9 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
         if (unlikely(tcp_seq != state->last_seq + state->last_len)) {
             if (unlikely(debug_enabled)) {
                 pr_err("xt_sslpin: out-of-order TCP segment (expecting seq 0x%08x, packet has 0x%08x)"
-                    " - dropping packet\n",
-                    state->last_seq + state->last_len,
-                    tcp_seq);
+                       " - dropping packet\n",
+                       state->last_seq + state->last_len,
+                       tcp_seq);
             }
             spin_unlock_bh(&sslpin_mt_lock);
             par->hotdrop = true;
@@ -432,7 +429,7 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
                 par->hotdrop = true;
                 if (unlikely(debug_enabled)) {
                     pr_err("xt_sslpin: unable to allocate parser context for connection"
-                        " - dropping packet and marking connection as invalid\n");
+                           " - dropping packet and marking connection as invalid\n");
                 }
                 return false;
             }
@@ -442,7 +439,7 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
         /* non-paged data */
         nonpaged_len = skb->len - skb->data_len - (tcp->doff << 2) - (ip->ihl << 2);
-        data = (__u8 *)tcp + (tcp->doff << 2);
+        data = (__u8*)tcp + (tcp->doff << 2);
         res = sslparser(state->parser_ctx, data, nonpaged_len);
 
         if (unlikely((res == SSLPARSER_RES_CONTINUE) && skb_is_nonlinear(skb))) {
@@ -479,7 +476,7 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
             par->hotdrop = true;
             if (unlikely(debug_enabled)) {
                 pr_warn("xt_sslpin: invalid SSL/TLS/X509 data received"
-                    " - dropping packet and marking connection as invalid\n");
+                        " - dropping packet and marking connection as invalid\n");
             }
             return false;
         }
@@ -490,7 +487,7 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
 
     /* check if matched */
-    matched = 
+    matched =
         likely(state->parser_ctx)
         && (
             !(state->cert_finger_print_mask & 1 << mtruleinfo->fpl_id)
@@ -508,9 +505,8 @@ static bool sslpin_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
 
 /* conntrack event listener (remove closed conns) */
-static int sslpin_conntrack_event(unsigned int events, struct nf_ct_event *item)
-{
-    struct sslpin_connstate *state;
+static int sslpin_conntrack_event(unsigned int events, struct nf_ct_event* item) {
+    struct sslpin_connstate* state;
 
     if (likely(((events & (1 << IPCT_DESTROY)) == 0) || (!item))) {
         return NOTIFY_DONE;

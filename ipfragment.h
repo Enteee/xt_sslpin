@@ -27,8 +27,7 @@
 #endif
 
 
-static inline bool is_ip_fragment(__u16 frag_off)
-{
+static inline bool is_ip_fragment(__u16 frag_off) {
     return (frag_off & htons(IP_MF | IP_OFFSET)) != 0;
 }
 

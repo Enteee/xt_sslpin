@@ -30,7 +30,7 @@ typedef enum {
 } sslparser_res_t;
 
 
-typedef void (*sslparser_hash_cb)(const __u8 * const val, void* data);
+typedef void (*sslparser_hash_cb)(const __u8* const val, void* data);
 
 #define SSLPARSER_MAX_COMMON_NAME_LEN               SSLPIN_MAX_COMMON_NAME_UTF8_BYTELEN
 #define SSLPARSER_MAX_PUBLIC_KEY_BYTELEN            SSLPIN_MAX_PUBLIC_KEY_BYTELEN
@@ -55,14 +55,14 @@ struct sslparser_ctx {
 
     /* Hashing state variables */
     struct {
-        struct shash_desc * desc;
-        __u8 *              val;
+        struct shash_desc* desc;
+        __u8*               val;
     } hash;
 
     /* Callbacks */
     struct {
-      sslparser_hash_cb     cert_finger_print;
-      void *                cert_finger_print_data;
+        sslparser_hash_cb     cert_finger_print;
+        void*                 cert_finger_print_data;
 
 #define SSLPARSER_CTX_REGISTER_CALLBACK(ctx, name, callback, data)                \
     ctx->cb.name = callback;                                                      \
@@ -160,12 +160,11 @@ struct sslparser_ctx {
     go_state(new_state, label);
 
 
-static sslparser_res_t sslparser(struct sslparser_ctx * const state, const __u8 *data, const __u32 data_len)
-{
-    const __u8 *const data_end          = data + data_len;
-    const __u8 *state_end               = data + state->state_remain;
+static sslparser_res_t sslparser(struct sslparser_ctx* const state, const __u8* data, const __u32 data_len) {
+    const __u8* const data_end          = data + data_len;
+    const __u8* state_end               = data + state->state_remain;
     __u8        statev                  = state->state;
-    const char *str;
+    const char* str;
 
     if (ul(statev >= SSLPARSER_STATE_FINISHED)) {
         return l(statev == SSLPARSER_STATE_FINISHED) ? SSLPARSER_RES_FINISHED : SSLPARSER_RES_INVALID;
@@ -226,7 +225,7 @@ state5_message_begin:
             if (ul(state->record_type == SSL3_RT_CHANGE_CIPHER_SPEC)) {
                 if (ul((state->msg_type != 1) || (state_remain() != 1))) {
                     invalid("invalid ChangeCipherSpec record (len = %ld, ccs_proto = %d)\n",
-                        (long)state_remain(), state->msg_type);
+                            (long)state_remain(), state->msg_type);
                 }
                 debug("ChangeCipherSpec record\n");
                 finished();
@@ -324,7 +323,7 @@ state50_finger_print_certificate:
                 invalid("certificate data length: %d\n", state->cert_remain);
             }
 
-            if(ul(crypto_shash_init(state->hash.desc) < 0)){
+            if (ul(crypto_shash_init(state->hash.desc) < 0)) {
                 invalid("faild (re-) iniaializing hash description\n");
             }
 
@@ -334,58 +333,58 @@ state50_finger_print_certificate:
                 state->cert_remain -= data_remain();
                 state->state_remain = state_remain() - data_remain();
 
-                if(ul(crypto_shash_update(state->hash.desc, data, data_remain()) < 0)){
+                if (ul(crypto_shash_update(state->hash.desc, data, data_remain()) < 0)) {
                     invalid("hash update failed\n");
                 }
                 need_more_data();
             }
 
-            if(ul(crypto_shash_update(state->hash.desc, data, state->cert_remain) < 0)){
+            if (ul(crypto_shash_update(state->hash.desc, data, state->cert_remain) < 0)) {
                 invalid("hash update failed\n");
             }
 
             // hash finished: callback
-            if(ul(crypto_shash_final(state->hash.desc, state->hash.val) < 0)){
+            if (ul(crypto_shash_final(state->hash.desc, state->hash.val) < 0)) {
                 invalid("hash final failed\n");
             }
 
             debug("finger print: %hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx:%hhx\n",
-                state->hash.val[0],
-                state->hash.val[1],
-                state->hash.val[2],
-                state->hash.val[3],
-                state->hash.val[4],
-                state->hash.val[5],
-                state->hash.val[6],
-                state->hash.val[7],
-                state->hash.val[8],
-                state->hash.val[9],
-                state->hash.val[10],
-                state->hash.val[11],
-                state->hash.val[12],
-                state->hash.val[13],
-                state->hash.val[14],
-                state->hash.val[15],
-                state->hash.val[16],
-                state->hash.val[17],
-                state->hash.val[18],
-                state->hash.val[19]
-            );
-            
+                  state->hash.val[0],
+                  state->hash.val[1],
+                  state->hash.val[2],
+                  state->hash.val[3],
+                  state->hash.val[4],
+                  state->hash.val[5],
+                  state->hash.val[6],
+                  state->hash.val[7],
+                  state->hash.val[8],
+                  state->hash.val[9],
+                  state->hash.val[10],
+                  state->hash.val[11],
+                  state->hash.val[12],
+                  state->hash.val[13],
+                  state->hash.val[14],
+                  state->hash.val[15],
+                  state->hash.val[16],
+                  state->hash.val[17],
+                  state->hash.val[18],
+                  state->hash.val[19]
+                 );
+
             // callback
-            if(state->cb.cert_finger_print){
+            if (state->cb.cert_finger_print) {
                 state->cb.cert_finger_print(state->hash.val, state->cb.cert_finger_print_data);
             }
 
             data += state->cert_remain - 1;
-            if(state_remain() != 1){
+            if (state_remain() != 1) {
                 // more certificates: loop
                 debug("more certificates\n");
                 step_state_to(50, state50_finger_print_certificate);
             }
 
             // message end
-            if(state->record_remain){
+            if (state->record_remain) {
                 // more messages
                 step_state_to(5, state5_message_begin);
             }
