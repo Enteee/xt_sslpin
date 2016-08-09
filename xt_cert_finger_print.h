@@ -81,7 +81,7 @@ static int sslpin_add_cert_finger_print(finger_print* fp, int mask) {
     int ret = 0;
     struct cert_finger_print* cfp;
     finger_print_str fp_str; 
-    bin2hex(fp_str, fp, sizeof(*fp));
+    bin2hex(fp_str, *fp, sizeof(*fp));
 
     spin_lock_bh(&sslpin_mt_lock);
 
