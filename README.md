@@ -39,7 +39,7 @@ For an introduction to SSL/TLS certificate pinning refer to the [OWASP pinning c
     curl --connect-timeout 5  https://github.com
     ```
 
-5. Reset (_Will remove all rules from INPUT table_)
+5. Reset (_will remove all rules from INPUT chain_)
     ```shell
     iptables -F INPUT
     ```
