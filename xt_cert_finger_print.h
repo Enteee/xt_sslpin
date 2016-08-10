@@ -17,12 +17,37 @@
 #ifndef _LINUX_NETFILTER_XT_SSLPIN_CERT_FINGER_PRINT_H
 #define _LINUX_NETFILTER_XT_SSLPIN_CERT_FINGER_PRINT_H
 
-#define SSLPIN_CERT_FINGER_PRINTS_HASH_BITS 10
 #define SSLPIN_FINGER_PRINT_SIZE 20 // 20*8 = 160bit = sizeof(sha1)
 #define SSLPIN_FINGER_PRINT_STR_SIZE 40 // 2 * SSLPIN_FINGER_PRINT_SIZE
 
+/**
+  * determines bucket of finger print
+  * @fp     finger print for which to get the bucket
+  * 
+  * Return:
+  * bucket index
+  */
+#define SSLPIN_CERT_FINGER_PRINT_BUCKET(fp)                                             \
+    (size_t)(                                                                           \
+          (fp)[0] <<  8                                                                 \
+        | (fp)[1] <<  0                                                                 \
+    )
+
+#define SSLPIN_CERT_FINGER_PRINTS_HASH_BITS 16
+
+
+#define SSLPIN_FINGER_PRINT_FMT                                                         \
+    "%hhx%hhx%hhx%hhx%hhx%hhx%hhx%hhx"                                                  \
+    "%hhx%hhx%hhx%hhx%hhx%hhx%hhx%hhx"                                                  \
+    "%hhx%hhx%hhx%hhx"
+
+
+#define SSLPIN_FINGER_PRINT_PRINT(fp)                                                   \
+    (fp)[0],  (fp)[1],  (fp)[2],  (fp)[3],  (fp)[4],  (fp)[5],  (fp)[6],  (fp)[7],      \
+    (fp)[8],  (fp)[9],  (fp)[10], (fp)[11], (fp)[12], (fp)[13], (fp)[14], (fp)[15],     \
+    (fp)[16], (fp)[17], (fp)[18], (fp)[19]
+
 typedef __u8 finger_print[SSLPIN_FINGER_PRINT_SIZE];
-typedef char finger_print_str[SSLPIN_FINGER_PRINT_STR_SIZE + 1]; // string representation of a finger print
 
 typedef int (*sslpin_read_finger_print_cb)(finger_print* fp, int mask);
 
@@ -60,18 +85,17 @@ struct cert_finger_print_list {
 /* forward decls */
 static struct kmem_cache*   sslpin_cert_finger_print_cache      __read_mostly;
 DEFINE_HASHTABLE(sslpin_cert_finger_prints,          SSLPIN_CERT_FINGER_PRINTS_HASH_BITS);
-#define FINGER_PRINT_BUCKET(fp) ((size_t)fp) >> (sizeof(size_t) * 8 - HASH_BITS(sslpin_cert_finger_prints))
 
 static struct cert_finger_print* sslpin_get_cert_finger_print(finger_print* fp) {
     struct cert_finger_print* ret =  NULL;
     struct cert_finger_print* i;
 
-    hlist_for_each_entry(i, &sslpin_cert_finger_prints[FINGER_PRINT_BUCKET(*fp)], next) {
-
-        finger_print_str fp_str1 = { 0 }, fp_str2 = { 0 };
-        bin2hex(fp_str1, *fp, sizeof(*fp));
-        bin2hex(fp_str2, i->fp, sizeof(*fp));
-        pr_debug("checking finger print (bucket = %zd, %s ?= %s)\n", FINGER_PRINT_BUCKET(*fp), fp_str1, fp_str2); 
+    hlist_for_each_entry(i, &sslpin_cert_finger_prints[SSLPIN_CERT_FINGER_PRINT_BUCKET(*fp)], next) {
+        pr_debug("checking finger print (bucket = %zd, "SSLPIN_FINGER_PRINT_FMT" ?= "SSLPIN_FINGER_PRINT_FMT")\n",
+            SSLPIN_CERT_FINGER_PRINT_BUCKET(*fp),
+            SSLPIN_FINGER_PRINT_PRINT(*fp),
+            SSLPIN_FINGER_PRINT_PRINT(i->fp)
+        );
 
         if (!memcmp(*fp, i->fp, sizeof(*fp))) {
             ret = i;
@@ -86,8 +110,6 @@ out:
 static int sslpin_add_cert_finger_print(finger_print* fp, int mask) {
     int ret = 0;
     struct cert_finger_print* cfp;
-    finger_print_str fp_str = {0}; 
-    bin2hex(fp_str, *fp, sizeof(*fp));
 
     spin_lock_bh(&sslpin_mt_lock);
 
@@ -102,9 +124,13 @@ static int sslpin_add_cert_finger_print(finger_print* fp, int mask) {
             goto out;
         }
         memcpy(cfp->fp, *fp, sizeof(*fp));
-        hlist_add_head(&cfp->next, &sslpin_cert_finger_prints[FINGER_PRINT_BUCKET(cfp->fp)]);
+        hlist_add_head(&cfp->next, &sslpin_cert_finger_prints[SSLPIN_CERT_FINGER_PRINT_BUCKET(cfp->fp)]);
 
-        pr_debug("xt_sslpin: added finger print (mask = %x, fp = %s, bucket = %zd)\n", mask, fp_str, FINGER_PRINT_BUCKET(*cfp->fp));
+        pr_debug("xt_sslpin: added finger print (mask = %x, fp = "SSLPIN_FINGER_PRINT_FMT", bucket = %zd)\n",
+            mask,
+            SSLPIN_FINGER_PRINT_PRINT(cfp->fp),
+            SSLPIN_CERT_FINGER_PRINT_BUCKET(cfp->fp)
+        );
     }
     cfp->mask |= mask;
 
@@ -117,8 +143,6 @@ out:
 static int sslpin_remove_cert_finger_print(finger_print* fp, int mask) {
     int ret = EINVAL; // default: finger print not found
     struct cert_finger_print* cfp;
-    finger_print_str fp_str = {0}; 
-    bin2hex(fp_str, *fp, sizeof(*fp));
 
     spin_lock_bh(&sslpin_mt_lock);
 
@@ -130,11 +154,20 @@ static int sslpin_remove_cert_finger_print(finger_print* fp, int mask) {
             // empty mask: remove cert fcfpnger prcfpnt
             hash_del(&cfp->next);
             kmem_cache_free(sslpin_cert_finger_print_cache, cfp);
+
+            pr_debug("xt_sslpin: removed finger print (mask = %x, fp = "SSLPIN_FINGER_PRINT_FMT")\n",
+                mask,
+                SSLPIN_FINGER_PRINT_PRINT(cfp->fp)
+            );
+        }else{
+            pr_debug("xt_sslpin: removed mask from finger print (mask = %x, fp = "SSLPIN_FINGER_PRINT_FMT")\n",
+                mask,
+                SSLPIN_FINGER_PRINT_PRINT(cfp->fp)
+            );
         }
 
         ret = 0;
 
-        pr_debug("xt_sslpin: removed finger print (mask = %x, fp = %s)\n", mask, fp_str);
     }
 
     spin_unlock_bh(&sslpin_mt_lock);
@@ -180,7 +213,9 @@ static ssize_t show_sslpin_cert_finger_prints(struct kobject* kobj, struct kobj_
 }
 
 struct cert_finger_print_list cert_finger_print_lists[] = {
-    DEF_CERT_FINGER_PRINT_LIST(1),  DEF_CERT_FINGER_PRINT_LIST(2),  DEF_CERT_FINGER_PRINT_LIST(3),
+    DEF_CERT_FINGER_PRINT_LIST(0),  DEF_CERT_FINGER_PRINT_LIST(1),  DEF_CERT_FINGER_PRINT_LIST(2), 
+    DEF_CERT_FINGER_PRINT_LIST(3),  DEF_CERT_FINGER_PRINT_LIST(4),  DEF_CERT_FINGER_PRINT_LIST(5),
+    DEF_CERT_FINGER_PRINT_LIST(6),  DEF_CERT_FINGER_PRINT_LIST(7),  DEF_CERT_FINGER_PRINT_LIST(8),
 };
 
 #define SSLPIN_FINGER_PRINT_LIST_SIZE (sizeof(cert_finger_print_lists)/sizeof(*cert_finger_print_lists))

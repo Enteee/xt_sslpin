@@ -174,9 +174,10 @@ void cert_finger_print_cb(const __u8* const val, void* data) {
 
     if (cfp) {
         // match found!
-        finger_print_str fp_str = {0};
-        bin2hex(fp_str, *fp, sizeof(*fp));
-        pr_debug("xt_sslpin: cert finger print matched (mask = %x, fp = %s)\n", cfp->mask, fp_str);
+        pr_debug("xt_sslpin: cert finger print matched (mask = %x, fp = "SSLPIN_FINGER_PRINT_FMT")\n",
+            cfp->mask,
+            SSLPIN_FINGER_PRINT_PRINT(cfp->fp)
+        );
 
         state->cert_finger_print_mask |= cfp->mask;
     }

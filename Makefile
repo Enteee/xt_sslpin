@@ -33,6 +33,7 @@ LIB_INSTALLPATH := $(XTABLES_DIR)/libxt_sslpin.so
 MOD_INSTALLPATH := $(MODULES_DIR)/extra/xt_sslpin.ko
 
 CLIBFLAGS := -O2 -Wall -fPIC
+CPPFLAGS :=
 
 obj-m := xt_sslpin.o
 
@@ -43,21 +44,24 @@ lib%.o: lib%.c
 	$(CC) $(CLIBFLAGS) $(CPPFLAGS) -D_INIT=lib$*_init -c -o $@ $<;
 
 all:		libxt_sslpin.so
-	KCPPFLAGS="$(CPPFLAGS)" make -C $(KERNEL_DIR) M=$$PWD;
+	KCPPFLAGS="$(CPPFLAGS)" \
+	make -C $(KERNEL_DIR) M=$$PWD;
 
 debug: CPPFLAGS = -DDEBUG=1 
 debug: all
 
 modules:
+	KCPPFLAGS="$(CPPFLAGS)" \
 	make -C $(KERNEL_DIR) M=$$PWD $@;
 
 modules_install:
+	KCPPFLAGS="$(CPPFLAGS)" \
 	make -C $(KERNEL_DIR) M=$$PWD $@;
 
 install:	log_install all modules_install
 	depmod -a
 	install -p -m 0644 libxt_sslpin.so $(XTABLES_DIR)
-	@echo "\nINSTALLED\n"
+	@echo -e "\nINSTALLED\n"
 	modinfo xt_sslpin
 	@echo
 	@echo "libxt_sslpin.so:"
@@ -73,14 +77,14 @@ uninstall:	log_install
 	@if [ -f $(LIB_INSTALLPATH) ]; then         \
 		rm -f /test; \
 	fi
-	@echo "\nUNINSTALLED\n"
+	@echo -e "\nUNINSTALLED\n"
 
 clean:
 	make -C $(KERNEL_DIR) M=$$PWD $@;
 	@rm -f libxt_sslpin.so
 
 log_install:
-	@echo "\nMODULES_DIR: $(MODULES_DIR)\nKERNEL_DIR:  $(KERNEL_DIR)\nXTABLES_DIR: $(XTABLES_DIR)\n"
+	@echo -e "\nMODULES_DIR: $(MODULES_DIR)\nKERNEL_DIR:  $(KERNEL_DIR)\nXTABLES_DIR: $(XTABLES_DIR)\n"
 
 format:
 	find -type f -name '*.[ch]' | xargs astyle --options=.astylerc
