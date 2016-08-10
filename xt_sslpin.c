@@ -145,7 +145,7 @@ static void sslpin_mt_destroy(const struct xt_mtdtor_param* par) {
 static int sslpin_mt_check(const struct xt_mtchk_param* par) {
     struct sslpin_mtruleinfo* mtruleinfo = par->matchinfo;
     /* sanity check input options */
-    if (mtruleinfo->fpl_id <= 0 || mtruleinfo->fpl_id > SSLPIN_FINGER_PRINT_LIST_SIZE) {
+    if (mtruleinfo->fpl_id < 0 || mtruleinfo->fpl_id > SSLPIN_FINGER_PRINT_LIST_SIZE) {
         pr_err("invalid finger print list id: %d\n", mtruleinfo->fpl_id);
         return EINVAL;
     }
