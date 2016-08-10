@@ -11,7 +11,7 @@ For an introduction to SSL/TLS certificate pinning refer to the [OWASP pinning c
 
 ## EXAMPLE
 
-1. Mark connections matching on list `0`:
+1. Mark connections matching on list `0`
     ```shell
     iptables -I INPUT -p tcp --sport 443 \
         -m conntrack --ctstate ESTABLISHED \
@@ -27,7 +27,7 @@ For an introduction to SSL/TLS certificate pinning refer to the [OWASP pinning c
     | sha1sum > /sys/kernel/xt_sslpin/0_add
     ```
 
-3. Drop marked connections:
+3. Drop marked connections
     ```shell
     iptables -I INPUT -j CONNMARK --restore-mark
     iptables -A INPUT -m connmark --mark 1 -j DROP
