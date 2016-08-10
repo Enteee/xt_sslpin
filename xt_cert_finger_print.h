@@ -54,30 +54,36 @@ struct cert_finger_print {
 #define SSLPIN_CERT_FINGER_PRINT_MASK_FMT "%#*.*x"
 #define SSLPIN_CERT_FINGER_PRINT_MASK_PRINT(mask) (int)sizeof(mask), (int)sizeof(mask), mask
     finger_print        fp;
+    char                name[SSLPIN_FINGER_PRINT_SIZE * 2 + 1];
+    struct attribute    attr;   // TODO: check if we've to create a attribute struct per fp and list
     struct hlist_node   next;
 };
 
 struct cert_finger_print_list {
 #define DEF_CERT_FINGER_PRINT_LIST(id) {                                                \
   .name = STR(id),                                                                      \
-  .mask = 1 << id ,                                                                     \
+  .mask = 1 << id,                                                                      \
+  .dir_name = STR(id),                                                                  \
+  .dir = NULL,                                                                          \
   .add = __ATTR(                                                                        \
-      fpl_ ## id ## _add,                                                               \
+      id ## _add,                                                                       \
       S_IWUSR | S_IRUGO,                                                                \
       add_show_cert_finger_print_list,                                                  \
       add_store_cert_finger_print_list                                                  \
   ),                                                                                    \
   .rm = __ATTR(                                                                         \
-      fpl_ ## id ## _rm,                                                                \
+      id ## _rm,                                                                        \
       S_IWUSR | S_IRUGO,                                                                \
       rm_show_cert_finger_print_list,                                                   \
       rm_store_cert_finger_print_list                                                   \
   )                                                                                     \
 }
-    char*                     name;
-    int                       mask;
-    struct kobj_attribute     add;
-    struct kobj_attribute     rm;
+    char *                  name;
+    int                     mask;
+    char *                  dir_name;
+    struct kobject *        dir;
+    struct kobj_attribute   add;
+    struct kobj_attribute   rm;
 };
 
 
@@ -109,36 +115,55 @@ out:
 static int sslpin_add_cert_finger_print(finger_print* fp, struct cert_finger_print_list* fpl) {
     int ret = 0;
     struct cert_finger_print* cfp;
-
+    
     spin_lock_bh(&sslpin_mt_lock);
 
     cfp = sslpin_get_cert_finger_print(fp);
-    if (!cfp) {
-        pr_debug("xt_sslpin: new finger print (mask = "SSLPIN_CERT_FINGER_PRINT_MASK_FMT", fp = "SSLPIN_FINGER_PRINT_FMT", bucket = %zd)\n",
-                 SSLPIN_CERT_FINGER_PRINT_MASK_PRINT(fpl->mask),
+    if (likely(!cfp)) {
+        pr_debug("xt_sslpin: new finger print (list = %s, fp = "SSLPIN_FINGER_PRINT_FMT", bucket = %zd)\n",
+                 fpl->name,
                  SSLPIN_FINGER_PRINT_PRINT(*fp),
                  SSLPIN_CERT_FINGER_PRINT_BUCKET(*fp)
                 );
 
         cfp = kmem_cache_zalloc(sslpin_cert_finger_print_cache, GFP_ATOMIC);
-        if (!cfp) {
+        if (unlikely(!cfp)) {
             pr_err("failed allocating space for new finger print\n");
 
             ret = ENOMEM;
             goto out;
         }
+        // initialize finger print
         memcpy(cfp->fp, *fp, sizeof(*fp));
+        ret = snprintf(cfp->name, sizeof(cfp->name), SSLPIN_FINGER_PRINT_FMT, SSLPIN_FINGER_PRINT_PRINT(*fp));
+        if(unlikely(ret != (sizeof(cfp->name) - 1))){
+            pr_err("faild converting finger print to string");
+            goto out;
+        }
+        cfp->attr.name = cfp->name;
         hlist_add_head(&cfp->next, &sslpin_cert_finger_prints[SSLPIN_CERT_FINGER_PRINT_BUCKET(cfp->fp)]);
     }else{
-        pr_debug("xt_sslpin: add mask to finger print (mask = "SSLPIN_CERT_FINGER_PRINT_MASK_FMT", fp = "SSLPIN_FINGER_PRINT_FMT", bucket = %zd)\n",
-                 SSLPIN_CERT_FINGER_PRINT_MASK_PRINT(fpl->mask),
+        pr_debug("xt_sslpin: add mask to finger print (list = %s, fp = "SSLPIN_FINGER_PRINT_FMT", bucket = %zd)\n",
+                 fpl->name,
                  SSLPIN_FINGER_PRINT_PRINT(cfp->fp),
                  SSLPIN_CERT_FINGER_PRINT_BUCKET(cfp->fp)
                 );
     }
+
+    if(!(cfp->mask & fpl->mask)){
+        // fp not yet in list
+        ret = sysfs_create_file(fpl->dir, &cfp->attr);
+        if (ret) {
+            pr_err("xt_sslpin: failed to create certificate finger print list entry (list = %s fp = "SSLPIN_FINGER_PRINT_FMT")\n", 
+                    fpl->name,
+                    SSLPIN_FINGER_PRINT_PRINT(cfp->fp)
+                  );
+            ret = EBADF;
+            goto out;
+        }
+    }
+
     cfp->mask |= fpl->mask;
-
-
 out:
     spin_unlock_bh(&sslpin_mt_lock);
     return ret;
@@ -151,26 +176,27 @@ static int sslpin_remove_cert_finger_print(finger_print* fp, struct cert_finger_
     spin_lock_bh(&sslpin_mt_lock);
 
     cfp = sslpin_get_cert_finger_print(fp);
-    if (cfp) {
-        // found: unmask
+    if (cfp && (cfp->mask & fpl->mask)){
+        // found and in list
+        sysfs_remove_file(fpl->dir, &cfp->attr);
+
         cfp->mask &= ~fpl->mask;
         if (!cfp->mask) {
-            pr_debug("xt_sslpin: removed finger print (mask = "SSLPIN_CERT_FINGER_PRINT_MASK_FMT", fp = "SSLPIN_FINGER_PRINT_FMT")\n",
-                     SSLPIN_CERT_FINGER_PRINT_MASK_PRINT(fpl->mask),
+            pr_debug("xt_sslpin: removed finger print (list = %s, fp = "SSLPIN_FINGER_PRINT_FMT")\n",
+                     fpl->name,
                      SSLPIN_FINGER_PRINT_PRINT(cfp->fp)
                     );
 
             hash_del(&cfp->next);
             kmem_cache_free(sslpin_cert_finger_print_cache, cfp);
         } else {
-            pr_debug("xt_sslpin: removed mask from finger print (mask = "SSLPIN_CERT_FINGER_PRINT_MASK_FMT", fp = "SSLPIN_FINGER_PRINT_FMT")\n",
-                     SSLPIN_CERT_FINGER_PRINT_MASK_PRINT(fpl->mask),
+            pr_debug("xt_sslpin: removed mask from finger print (list = %s, fp = "SSLPIN_FINGER_PRINT_FMT")\n",
+                     fpl->name,
                      SSLPIN_FINGER_PRINT_PRINT(cfp->fp)
                     );
         }
 
         ret = 0;
-
     }
 
     spin_unlock_bh(&sslpin_mt_lock);
@@ -269,16 +295,22 @@ static int sslpin_cert_finger_print_init(struct kobject* sslpin_kobj) {
 
     for (i = 0; i < SSLPIN_FINGER_PRINT_LIST_SIZE; ++i) {
         struct cert_finger_print_list* fpl = &(cert_finger_print_lists[i]);
+        fpl->dir = kobject_create_and_add(fpl->dir_name, sslpin_kobj);
+        if (!fpl->dir) {
+            pr_err("xt_sslpin: failed to create certificate finger print list directory (name = %s)\n", fpl->dir_name);
+            ret = EBADF;
+            goto err_sysfs;
+        }
         ret = sysfs_create_file(sslpin_kobj, &(fpl->add.attr));
         if (ret) {
-            pr_err("xt_sslpin: failed to create certificate finger print add-api (name = %s)\n", fpl->name);
-            ret = EINVAL;
+            pr_err("xt_sslpin: failed to create certificate finger print list add-api (name = %s)\n", fpl->name);
+            ret = EBADF;
             goto err_sysfs;
         }
         ret = sysfs_create_file(sslpin_kobj, &(fpl->rm.attr));
         if (ret) {
-            pr_err("xt_sslpin: failed to create certificate finger print rm-api (name = %s)\n", fpl->name);
-            ret = EINVAL;
+            pr_err("xt_sslpin: failed to create certificate finger print list rm-api (name = %s)\n", fpl->name);
+            ret = EBADF;
             goto err_sysfs;
         }
     }
@@ -300,14 +332,20 @@ err_cache_init:
 }
 
 static void sslpin_cert_finger_print_destroy(void) {
+    size_t i;
     size_t bkt;
-    struct cert_finger_print* i;
-    hash_for_each(sslpin_cert_finger_prints, bkt, i, next) {
-        pr_debug("xt_sslpin: removed finger print (mask = %#x, fp = "SSLPIN_FINGER_PRINT_FMT")\n",
-                 i->mask,
-                 SSLPIN_FINGER_PRINT_PRINT(i->fp)
+    struct cert_finger_print* cfp;
+
+    for (i = 0; i < SSLPIN_FINGER_PRINT_LIST_SIZE; ++i) {
+        struct cert_finger_print_list* fpl = &(cert_finger_print_lists[i]);
+        kobject_put(fpl->dir);
+    }
+
+    hash_for_each(sslpin_cert_finger_prints, bkt, cfp, next) {
+        pr_debug("xt_sslpin: removed finger print (fp = "SSLPIN_FINGER_PRINT_FMT")\n",
+                 SSLPIN_FINGER_PRINT_PRINT(cfp->fp)
                 );
-        kmem_cache_free(sslpin_cert_finger_print_cache, i);
+        kmem_cache_free(sslpin_cert_finger_print_cache, cfp);
     }
     kmem_cache_destroy(sslpin_cert_finger_print_cache);
 }

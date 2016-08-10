@@ -171,14 +171,14 @@ void cert_finger_print_cb(const __u8* const val, void* data) {
     struct cert_finger_print* cfp = sslpin_get_cert_finger_print(fp);
 
     if (cfp) {
-        pr_debug("xt_sslpin: cert finger print matched (mask = %x, fp = "SSLPIN_FINGER_PRINT_FMT")\n",
-                 cfp->mask,
+        pr_debug("xt_sslpin: cert finger print found (mask = "SSLPIN_CERT_FINGER_PRINT_MASK_FMT", fp = "SSLPIN_FINGER_PRINT_FMT")\n",
+                 SSLPIN_CERT_FINGER_PRINT_MASK_PRINT(cfp->mask),
                  SSLPIN_FINGER_PRINT_PRINT(cfp->fp)
                 );
 
         state->cert_finger_print_mask |= cfp->mask;
     }else{
-        pr_debug("xt_sslpin: cert finger print not matched (fp = "SSLPIN_FINGER_PRINT_FMT")\n",
+        pr_debug("xt_sslpin: cert finger print not found (fp = "SSLPIN_FINGER_PRINT_FMT")\n",
                  SSLPIN_FINGER_PRINT_PRINT(*fp)
                 );
 
