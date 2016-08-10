@@ -49,7 +49,7 @@ MODULE_LICENSE("GPL");
 MODULE_ALIAS("ipt_sslpin");
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3,7,0)
-    #error "Kernel not supported, must be at least" KERNEL_VERSION(3,7,0)
+#error "Kernel not supported, must be at least" KERNEL_VERSION(3,7,0)
 #endif
 
 /* forward decls */
@@ -173,9 +173,9 @@ void cert_finger_print_cb(const __u8* const val, void* data) {
     if (cfp) {
         // match found!
         pr_debug("xt_sslpin: cert finger print matched (mask = %x, fp = "SSLPIN_FINGER_PRINT_FMT")\n",
-            cfp->mask,
-            SSLPIN_FINGER_PRINT_PRINT(cfp->fp)
-        );
+                 cfp->mask,
+                 SSLPIN_FINGER_PRINT_PRINT(cfp->fp)
+                );
 
         state->cert_finger_print_mask |= cfp->mask;
     }

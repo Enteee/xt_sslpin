@@ -59,7 +59,7 @@ static inline const char* sslpin_ssl_handshake_mt_to_string(__u8 mt) {
         case TSL1_2_MT_HELLO_VERIFY_REQUEST:
             return "HelloVerifyRequest";
         case TLS1_MT_NEWSESSIONTICKET:
-            return "NewSessioNticket";
+            return "NewSessionticket";
         case SSL3_MT_CERTIFICATE:
             return "Certificate";
         case SSL3_MT_SERVER_KEY_EXCHANGE:

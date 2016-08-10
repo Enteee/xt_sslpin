@@ -56,7 +56,7 @@ static void sslpin_mt_help(void) {
 /* parse options */
 static int sslpin_mt_parse(int c, char** argv, int invert, unsigned int* flags, const void* entry,
                            struct xt_entry_match** match) {
-    char *end;
+    char* end;
     struct sslpin_mtruleinfo* mtruleinfo = (struct sslpin_mtruleinfo*)(*match)->data;
 
     switch (c) {
