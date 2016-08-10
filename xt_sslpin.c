@@ -176,7 +176,7 @@ void cert_finger_print_cb(const __u8* const val, void* data) {
         // match found!
         finger_print_str fp_str = {0};
         bin2hex(fp_str, *fp, sizeof(*fp));
-        pr_info("xt_sslpin: cert finger print matched (mask = %x, fp = %s)\n", cfp->mask, fp_str);
+        pr_debug("xt_sslpin: cert finger print matched (mask = %x, fp = %s)\n", cfp->mask, fp_str);
 
         state->cert_finger_print_mask |= cfp->mask;
     }
@@ -349,9 +349,9 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
             return false;
         }
 
-        if (unlikely(debug_enabled && (state->state == SSLPIN_CONNSTATE_GOT_SYNACK))
+        if (unlikely(state->state == SSLPIN_CONNSTATE_GOT_SYNACK)
                 && (tcp_seq != state->last_seq)) {
-            pr_info("xt_sslpin: received duplicate SYN/ACK with different seq\n");
+            pr_debug("xt_sslpin: received duplicate SYN/ACK with different seq\n");
         }
 
         /* valid SYN/ACK connection establishment */

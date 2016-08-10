@@ -14,7 +14,8 @@
 # the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
 
-TOPLEVEL := $(shell git rev-parse --show-toplevel)
+
+.PHONY: debug all modules modules_install install clean log_install format
 
 # Detect libdir: /lib vs. /lib64
 libdir.x86_64 = /lib64
@@ -35,15 +36,17 @@ CLIBFLAGS := -O2 -Wall -fPIC
 
 obj-m := xt_sslpin.o
 
-
 lib%.so: lib%.o
 	$(CC) -shared -o $@ $^;
 
 lib%.o: lib%.c
-	$(CC) $(CLIBFLAGS) -D_INIT=lib$*_init -c -o $@ $<;
+	$(CC) $(CLIBFLAGS) $(CPPFLAGS) -D_INIT=lib$*_init -c -o $@ $<;
 
 all:		libxt_sslpin.so
-	make -C $(KERNEL_DIR) M=$$PWD;
+	KCPPFLAGS="$(CPPFLAGS)" make -C $(KERNEL_DIR) M=$$PWD;
+
+debug: CPPFLAGS = -DDEBUG=1 
+debug: all
 
 modules:
 	make -C $(KERNEL_DIR) M=$$PWD $@;
@@ -80,4 +83,4 @@ log_install:
 	@echo "\nMODULES_DIR: $(MODULES_DIR)\nKERNEL_DIR:  $(KERNEL_DIR)\nXTABLES_DIR: $(XTABLES_DIR)\n"
 
 format:
-	find $(TOPLEVEL) -type f -name '*.[ch]' | xargs astyle --options=$(TOPLEVEL)/.astylerc
+	find -type f -name '*.[ch]' | xargs astyle --options=.astylerc

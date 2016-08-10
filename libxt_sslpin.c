@@ -56,18 +56,19 @@ static void sslpin_mt_help(void) {
 /* parse options */
 static int sslpin_mt_parse(int c, char** argv, int invert, unsigned int* flags, const void* entry,
                            struct xt_entry_match** match) {
+    char *end;
     struct sslpin_mtruleinfo* mtruleinfo = (struct sslpin_mtruleinfo*)(*match)->data;
 
     switch (c) {
         case 'f':
             if (*flags) {
                 xtables_error(PARAMETER_PROBLEM, "sslpin: --fpl can only be specified once");
-                return -1;
+                goto err;
             }
-            mtruleinfo->fpl_id = strtol(optarg, NULL, 10);
-            if (mtruleinfo->fpl_id <= 0) {
+            mtruleinfo->fpl_id = strtol(optarg, &end, 10);
+            if (optarg == end || mtruleinfo->fpl_id < 0) {
                 xtables_error(PARAMETER_PROBLEM, "sslpin: --fpl invalid id argument");
-                return -1;
+                goto err;
             }
             if (invert) {
                 mtruleinfo->flags |= SSLPIN_RULE_FLAG_INVERT;
@@ -78,10 +79,13 @@ static int sslpin_mt_parse(int c, char** argv, int invert, unsigned int* flags, 
             mtruleinfo->flags |= SSLPIN_RULE_FLAG_DEBUG;
             break;
         default:
-            return false;
+            goto err;
     }
 
-    return true;
+    return 1;
+
+err:
+    return -1;
 }
 
 
