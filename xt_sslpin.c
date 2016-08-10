@@ -177,7 +177,7 @@ void cert_finger_print_cb(const __u8* const val, void* data) {
                 );
 
         state->cert_finger_print_mask |= cfp->mask;
-    }else{
+    } else {
         pr_debug("xt_sslpin: cert finger print not found (fp = "SSLPIN_FINGER_PRINT_FMT")\n",
                  SSLPIN_FINGER_PRINT_PRINT(*fp)
                 );
