@@ -19,7 +19,7 @@ iptables -I INPUT -m conntrack --ctstate ESTABLISHED -p tcp --sport 443 \
     -j DROP
 ```
 
-Add cert https://github.com certificate to list `0`
+Add https://github.com certificate to list `0`
 
 ```shell
 echo \
