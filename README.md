@@ -18,6 +18,7 @@ For an introduction to SSL/TLS certificate pinning refer to the [OWASP pinning c
         -m sslpin --debug --fpl 0 \
         -j CONNMARK --set-mark 1
     ```
+
 2. Add https://github.com certificate to list `0`
     ```shell
     echo \
@@ -25,15 +26,22 @@ For an introduction to SSL/TLS certificate pinning refer to the [OWASP pinning c
     | openssl x509 -outform DER \
     | sha1sum > /sys/kernel/xt_sslpin/0_add
     ```
+
 3. Drop marked connections:
     ```shell
     iptables -I INPUT -j CONNMARK --restore-mark
     iptables -A INPUT -m connmark --mark 1 -j DROP
     iptables -A INPUT -j CONNMARK --save-mark
     ```
+
 4. Test (should time out)
     ```shell
     curl --connect-timeout 5  https://github.com
+    ```
+
+5. Reset (_Will remove all rules from INPUT table_)
+    ```shell
+    iptables -F INPUT
     ```
 
 ## INSTALLATION
