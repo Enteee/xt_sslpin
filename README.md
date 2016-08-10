@@ -27,6 +27,7 @@ xt_sslpin will only validate the public key (with minimal performance impact), a
 Prerequisites
 
 * linux kernel > 3.7, check ```$ uname -r```
+* kernel-headers
 * gcc
 * git
 * iptables-dev

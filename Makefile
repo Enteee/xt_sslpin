@@ -25,8 +25,8 @@ libdir = $(libdir.$(shell uname -m))
 # System configuration
 MODULES_DIR := /lib/modules/$(shell uname -r)
 KERNEL_DIR := $(MODULES_DIR)/build
-# XTABLES_DIR := $(libdir)/xtables
-XTABLES_DIR := $(libdir.i686)/xtables
+ XTABLES_DIR := $(libdir)/iptables
+#XTABLES_DIR := $(libdir.i686)/iptables
 
 # --
 LIB_INSTALLPATH := $(XTABLES_DIR)/libxt_sslpin.so
