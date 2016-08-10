@@ -7,7 +7,7 @@ _netfilter/xtables module: match SSL/TLS certificate finger prints_
 
 ## DESCRIPTION
 
-For an introduction to SSL/TLS certificate pinning refer to the [OWASP pinning cheat sheet](https://www.owasp.org/index.php/Pinning_Cheat_Sheet). xt_sslpin lets you do certificate validation/pinning at the netfilter level. xt_sslpin will validate the certificate finger print (with minimal performance impact). Applications are expected to do further certificate chain validation and signature checks (i.e. normal SSL/TLS processing).
+For an introduction to SSL/TLS certificate pinning refer to the [OWASP pinning cheat sheet](https://www.owasp.org/index.php/Pinning_Cheat_Sheet). xt_sslpin lets you do certificate validation/pinning at the netfilter level. xt_sslpin will match certificate finger prints in SSL/TLS connections (with minimal performance impact). Applications are expected to do further certificate chain validation and signature checks (i.e. normal SSL/TLS processing).
 
 ## EXAMPLE
 
