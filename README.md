@@ -14,7 +14,8 @@ For an introduction to SSL/TLS certificate pinning refer to the [OWASP pinning c
 Drop connections matching on list `0`:
 
 ```shell
-iptables -I INPUT -m conntrack --ctstate ESTABLISHED -p tcp --sport 443 \
+iptables -I INPUT -p tcp --sport 443 \
+    -m conntrack --ctstate ESTABLISHED \
     -m sslpin --debug --fpl 0 \
     -j DROP
 ```
@@ -57,8 +58,6 @@ Verify install:
 iptables -m sslpin -h
 ```
 
-Usage: _See Example and Options sections._
-
 ### Uninstalling
 
 Clean source/build directory:
@@ -77,30 +76,28 @@ sudo make uninstall
 
 Options preceded by an exclamation mark negate the comparison: the rule will match if the presented SSL/TLS certificate fingerprint does NOT match the specified public key.
 
-### `[!] --fpl <id>`
+### `[!] --fpl <list id>` 
 
-If a "Certificate" message is seen, match if the certificate matches a finger print in the given list.
-
-`<id>` denotes the finger print list id. 
-
-(_The `--debug` option can be used to get the public key for a server._)
+If a "Certificate" message is seen, match if the one of the certificates matches a finger print in the given list. (_The `--debug` option can be used to get the public key for a server._)
 
 ### `--debug`
 
 Verbose logging.
 
-    kernel: [ 154.806189] xt_sslpin 1.0 (SSL/TLS pinning)
-    kernel: [ 156.976209] xt_sslpin: 1 connection (0 actively monitored)
-    kernel: [ 156.127355] xt_sslpin: 1 connection (1 actively monitored)
-    kernel: [ 157.127367] xt_sslpin: sslparser: ServerHello handshake message (len = 85)
-    kernel: [ 157.127370] xt_sslpin: sslparser: Certificate handshake message (len = 2193)
-    kernel: [ 157.127373] xt_sslpin: sslparser: cn = "example.com"
-    kernel: [ 157.127378] xt_sslpin: sslparser: pubkey_alg = { name:"rsa", oid_asn1_hex:[2a864886f...] }
-    kernel: [ 157.127387] xt_sslpin: sslparser: pubkey = [00000000000000000000000000000000...]
-    kernel: [ 159.129145] xt_sslpin: sslparser: ServerDone handshake message (len = 0)
-    kernel: [ 159.285698] xt_sslpin: sslparser: ChangeCipherSpec record
-    kernel: [ 159.285714] xt_sslpin: rule not matched (cn = "example.com")
-    kernel: [ 159.344721] xt_sslpin: 1 connection (0 actively monitored)
+```
+kernel: [ 154.806189] xt_sslpin 1.0 (SSL/TLS pinning)
+kernel: [ 156.976209] xt_sslpin: 1 connection (0 actively monitored)
+kernel: [ 156.127355] xt_sslpin: 1 connection (1 actively monitored)
+kernel: [ 157.127367] xt_sslpin: sslparser: ServerHello handshake message (len = 85)
+kernel: [ 157.127370] xt_sslpin: sslparser: Certificate handshake message (len = 2193)
+kernel: [ 157.127373] xt_sslpin: sslparser: cn = "example.com"
+kernel: [ 157.127378] xt_sslpin: sslparser: pubkey_alg = { name:"rsa", oid_asn1_hex:[2a864886f...] }
+kernel: [ 157.127387] xt_sslpin: sslparser: pubkey = [00000000000000000000000000000000...]
+kernel: [ 159.129145] xt_sslpin: sslparser: ServerDone handshake message (len = 0)
+kernel: [ 159.285698] xt_sslpin: sslparser: ChangeCipherSpec record
+kernel: [ 159.285714] xt_sslpin: rule not matched (cn = "example.com")
+kernel: [ 159.344721] xt_sslpin: 1 connection (0 actively monitored)
+```
 
 ## LIST API
 
