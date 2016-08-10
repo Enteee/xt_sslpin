@@ -36,8 +36,6 @@
 #include <linux/netfilter/nf_conntrack_common.h>
 #include <net/netfilter/nf_conntrack_ecache.h>
 
-#include "hexutils.h"
-
 #include "xt_sslpin.h"
 #include "ipfragment.h"
 #include "xt_globals.h"
