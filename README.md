@@ -1,36 +1,42 @@
 # xt_sslpin 
 _netfilter/xtables module: match SSL/TLS certificate finger prints_
 
-
 ## SYNOPSIS
 
     iptables -I <chain> .. -m sslpin [!] --fpl <finger print list id> [--debug] ..
 
-
 ## DESCRIPTION
 
-For an introduction to SSL/TLS certificate pinning, see: https://www.owasp.org/index.php/Pinning_Cheat_Sheet
-
-xt_sslpin lets you do certificate validation/pinning at the netfilter level.
-
-xt_sslpin will only validate the public key (with minimal performance impact), and applications are expected to do further certificate chain validation and signature checks (i.e. normal SSL/TLS processing).
-
+For an introduction to SSL/TLS certificate pinning refer to the [OWASP pinning cheat sheet](https://www.owasp.org/index.php/Pinning_Cheat_Sheet). xt_sslpin lets you do certificate validation/pinning at the netfilter level. xt_sslpin will validate the certificate finger print (with minimal performance impact). Applications are expected to do further certificate chain validation and signature checks (i.e. normal SSL/TLS processing).
 
 ## EXAMPLE
 
-    iptables -I INPUT -m conntrack --ctstate ESTABLISHED -p tcp --sport 443 \
-        -m sslpin --debug --fpl 1 \
-        -j DROP
+Drop connections matching on list `0`:
+
+```shell
+iptables -I INPUT -m conntrack --ctstate ESTABLISHED -p tcp --sport 443 \
+    -m sslpin --debug --fpl 0 \
+    -j DROP
+```
+
+Add cert https://github.com certificate to list `0`
+
+```shell
+echo \
+| openssl s_client -connect github.com:443 2>/dev/null \
+| openssl x509 -outform DER \
+| sha1sum > /sys/kernel/xt_sslpin/0_add
+```
 
 ## INSTALLATION
 
 Prerequisites
 
-* linux kernel > 3.7, check ```$ uname -r```
+* linux kernel > 3.7
 * kernel-headers
+* iptables-dev
 * gcc
 * git
-* iptables-dev
 
 then:
 
@@ -40,43 +46,44 @@ then:
 
 Build and install:
 
-    make
-    sudo make install
+```shell
+make
+sudo make install
+```
 
 Verify install:
 
-    iptables -m sslpin -h
+```shell
+iptables -m sslpin -h
+```
 
 Usage: _See Example and Options sections._
 
-
-##### Uninstalling
+### Uninstalling
 
 Clean source/build directory:
 
-    make clean
+```shell
+make clean
+```
 
 Uninstall:
 
-    sudo make uninstall
-
+```shell
+sudo make uninstall
+```
 
 ## OPTIONS
 
-Options preceded by an exclamation point negate the comparison: the rule will match if the presented SSL/TLS certificate does NOT have the specified public key.
+Options preceded by an exclamation mark negate the comparison: the rule will match if the presented SSL/TLS certificate fingerprint does NOT match the specified public key.
 
+### `[!] --fpl <id>`
 
-### `[!] --pubkey <alg>:<pubkey-hex>`
+If a "Certificate" message is seen, match if the certificate matches a finger print in the given list.
 
-If a "Certificate" message is seen, match if the certificate has the specified public key.
+`<id>` denotes the finger print list id. 
 
-`<alg>` denotes the expected Public Key Algorithm, and can be one of the following: *rsa, dsa, ec*.
-
-`<pubkey-hex>` is the subjectPublicKey as hex bytes, e.g.: `0011223344`.
-
-(_The `--debug` option can be used to get the public key for a site/IP._)
-
-
+(_The `--debug` option can be used to get the public key for a server._)
 
 ### `--debug`
 
@@ -95,11 +102,20 @@ Verbose logging.
     kernel: [ 159.285714] xt_sslpin: rule not matched (cn = "example.com")
     kernel: [ 159.344721] xt_sslpin: 1 connection (0 actively monitored)
 
+## LIST API
+
+The list API is exposed under: `/sys/kernel/xt_sslpin/`.
+
+| Operation | Command |
+| --------- | ------- |
+| ADD       | `echo finger-print-sha1 > /sys/kernel/xt_sslpin/<list id>_add` |
+| REMOVE    | `echo finger-print-sha1 > /sys/kernel/xt_sslpin/<list id>_rm`  |
+| LIST      | `ls /sys/kernel/xt_sslpin/<list id>` |
 
 ## IMPLEMENTATION NOTES
 
 Per connection, the incoming handshake data is parsed once across all -m sslpin iptables rules;
-upon receiving the SSL/TLS handshake ChangeCipherSpec message, the parsed certificate is checked by all rules.
+upon receiving the SSL/TLS handshake ChangeCipherSpec message, the parsed certificates are checked by all rules.
 
 After this, the connection is marked as "finished", and xt_sslpin will not do any further checking.
 (Re-handshaking will not be checked in order to incur minimal overhead, and as the server has already proved
@@ -111,7 +127,6 @@ can still have non-linear memory layout; see skb_is_nonlinear().
 
 If SYN is received on a time-wait state conn/flow, conntrack will destroy the old cf_conn
 and create a new cf_conn. Thus, our per-conn state transitions are simply new->open->destroyed (no reopen).
-
 
 ## TODO
 
