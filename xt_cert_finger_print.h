@@ -37,9 +37,9 @@
 
 
 #define SSLPIN_FINGER_PRINT_FMT                                                         \
-    "%hhx%hhx%hhx%hhx%hhx%hhx%hhx%hhx"                                                  \
-    "%hhx%hhx%hhx%hhx%hhx%hhx%hhx%hhx"                                                  \
-    "%hhx%hhx%hhx%hhx"
+    "%2.2hhx%2.2hhx%2.2hhx%2.2hhx%2.2hhx%2.2hhx%2.2hhx%2.2hhx"                          \
+    "%2.2hhx%2.2hhx%2.2hhx%2.2hhx%2.2hhx%2.2hhx%2.2hhx%2.2hhx"                          \
+    "%2.2hhx%2.2hhx%2.2hhx%2.2hhx"
 
 
 #define SSLPIN_FINGER_PRINT_PRINT(fp)                                                   \
@@ -91,7 +91,7 @@ static struct cert_finger_print* sslpin_get_cert_finger_print(finger_print* fp) 
     struct cert_finger_print* i;
 
     hlist_for_each_entry(i, &sslpin_cert_finger_prints[SSLPIN_CERT_FINGER_PRINT_BUCKET(*fp)], next) {
-        pr_debug("checking finger print (bucket = %zd, "SSLPIN_FINGER_PRINT_FMT" ?= "SSLPIN_FINGER_PRINT_FMT")\n",
+        pr_debug("xt_sslpin: checking finger print (bucket = %zd, "SSLPIN_FINGER_PRINT_FMT" ?= "SSLPIN_FINGER_PRINT_FMT")\n",
                  SSLPIN_CERT_FINGER_PRINT_BUCKET(*fp),
                  SSLPIN_FINGER_PRINT_PRINT(*fp),
                  SSLPIN_FINGER_PRINT_PRINT(i->fp)
@@ -115,7 +115,12 @@ static int sslpin_add_cert_finger_print(finger_print* fp, int mask) {
 
     cfp = sslpin_get_cert_finger_print(fp);
     if (!cfp) {
-        // not found: add new finger print to hashmap
+        pr_debug("xt_sslpin: new finger print (mask = %x, fp = "SSLPIN_FINGER_PRINT_FMT", bucket = %zd)\n",
+                 mask,
+                 SSLPIN_FINGER_PRINT_PRINT(*fp),
+                 SSLPIN_CERT_FINGER_PRINT_BUCKET(*fp)
+                );
+
         cfp = kmem_cache_zalloc(sslpin_cert_finger_print_cache, GFP_ATOMIC);
         if (!cfp) {
             pr_err("failed allocating space for new finger print\n");
@@ -125,8 +130,8 @@ static int sslpin_add_cert_finger_print(finger_print* fp, int mask) {
         }
         memcpy(cfp->fp, *fp, sizeof(*fp));
         hlist_add_head(&cfp->next, &sslpin_cert_finger_prints[SSLPIN_CERT_FINGER_PRINT_BUCKET(cfp->fp)]);
-
-        pr_debug("xt_sslpin: added finger print (mask = %x, fp = "SSLPIN_FINGER_PRINT_FMT", bucket = %zd)\n",
+    }else{
+        pr_debug("xt_sslpin: add mask to finger print (mask = %x, fp = "SSLPIN_FINGER_PRINT_FMT", bucket = %zd)\n",
                  mask,
                  SSLPIN_FINGER_PRINT_PRINT(cfp->fp),
                  SSLPIN_CERT_FINGER_PRINT_BUCKET(cfp->fp)
