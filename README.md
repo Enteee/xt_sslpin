@@ -22,7 +22,7 @@ For an introduction to SSL/TLS certificate pinning refer to the [OWASP pinning c
 2. Add https://github.com certificate to list `0`
     ```shell
     echo \
-    | openssl s_client -connect github.com:443 2>/dev/null \
+    | openssl s_client -connect github.com:443 -servername github.com 2>/dev/null \
     | openssl x509 -outform DER \
     | sha1sum > /sys/kernel/xt_sslpin/0_add
     ```
