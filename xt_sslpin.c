@@ -59,7 +59,7 @@ static struct kobject*              sslpin_kobj                 __read_mostly;
 
 /* module init function */
 static int __init sslpin_mt_init(void) {
-    int ret;
+    int ret = 0;
 
     pr_info("xt_sslpin " XT_SSLPIN_VERSION " (SSL/TLS pinning)\n");
 
@@ -171,14 +171,14 @@ void cert_finger_print_cb(const __u8* const val, void* data) {
     struct cert_finger_print* cfp = sslpin_get_cert_finger_print(fp);
 
     if (cfp) {
-        pr_debug("xt_sslpin: cert finger print found (mask = "SSLPIN_CERT_FINGER_PRINT_MASK_FMT", fp = "SSLPIN_FINGER_PRINT_FMT")\n",
+        pr_debug("xt_sslpin: cert finger print found (mask = "SSLPIN_CERT_FINGER_PRINT_MASK_FMT", fp = "SSLPIN_FINGER_PRINT_PRINT_FMT")\n",
                  SSLPIN_CERT_FINGER_PRINT_MASK_PRINT(cfp->mask),
                  SSLPIN_FINGER_PRINT_PRINT(cfp->fp)
                 );
 
         state->cert_finger_print_mask |= cfp->mask;
     } else {
-        pr_debug("xt_sslpin: cert finger print not found (fp = "SSLPIN_FINGER_PRINT_FMT")\n",
+        pr_debug("xt_sslpin: cert finger print not found (fp = "SSLPIN_FINGER_PRINT_PRINT_FMT")\n",
                  SSLPIN_FINGER_PRINT_PRINT(*fp)
                 );
 
