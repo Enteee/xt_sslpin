@@ -36,10 +36,10 @@
 #define SSLPIN_CERT_FINGER_PRINTS_HASH_BITS 16
 
 #define SSLPIN_FINGER_PRINT_PRINT_FMT                                                   \
-    "%2.2hhx%2.2hhx%2.2hhx%2.2hhx%2.2hhx%2.2hhx"                                        \
-    "%2.2hhx%2.2hhx%2.2hhx%2.2hhx%2.2hhx%2.2hhx"                                        \
-    "%2.2hhx%2.2hhx%2.2hhx%2.2hhx%2.2hhx%2.2hhx"                                        \
-    "%2.2hhx%2.2hhx"
+    "%2.2hhX%2.2hhX%2.2hhX%2.2hhX%2.2hhX%2.2hhX"                                        \
+    "%2.2hhX%2.2hhX%2.2hhX%2.2hhX%2.2hhX%2.2hhX"                                        \
+    "%2.2hhX%2.2hhX%2.2hhX%2.2hhX%2.2hhX%2.2hhX"                                        \
+    "%2.2hhX%2.2hhX"
 
 #define SSLPIN_FINGER_PRINT_PRINT(fp)                                                   \
     (fp)[0],  (fp)[1],  (fp)[2],  (fp)[3],  (fp)[4],  (fp)[5],                          \
@@ -53,10 +53,10 @@
  * see: https://stackoverflow.com/questions/38900645/sscanf-linux-kernel-differs-from-sscanf-glibc
  */
 #define SSLPIN_FINGER_PRINT_READ_FMT                                                    \
-    "%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx"                                                    \
-    "%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx"                                                    \
-    "%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx"                                                    \
-    "%2hhx%2hhx"
+    "%2hhX%2hhX%2hhX%2hhX%2hhX%2hhX"                                                    \
+    "%2hhX%2hhX%2hhX%2hhX%2hhX%2hhX"                                                    \
+    "%2hhX%2hhX%2hhX%2hhX%2hhX%2hhX"                                                    \
+    "%2hhX%2hhX"
 
 #define SSLPIN_FINGER_PRINT_READ(fp)                                                    \
     &(fp)[0],  &(fp)[1],  &(fp)[2],  &(fp)[3],  &(fp)[4],  &(fp)[5],                    \

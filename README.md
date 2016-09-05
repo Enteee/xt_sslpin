@@ -56,9 +56,11 @@ Prerequisites
 
 then:
 
-    git clone https://github.com/Enteee/xt_sslpin.git
-    cd xt_sslpin
-    sudo apt-get install iptables-dev # xtables.h
+```shell
+git clone https://github.com/Enteee/xt_sslpin.git
+cd xt_sslpin
+sudo apt-get install iptables-dev # xtables.h
+```
 
 Build and install:
 
