@@ -26,7 +26,6 @@
 
 /* parameter definitions */
 static const struct option sslpin_mt_opts[] = {
-    { .name = "debug",      .has_arg = false,   .val = 'd' },
     { .name = "fpl",        .has_arg = true,    .val = 'f' },
     { NULL },
 };
@@ -47,7 +46,6 @@ static void sslpin_mt_help(void) {
     printf(
         "sslpin match options:\n"
         " [!] --fpl id     finger print list id\n"
-        "     --debug      verbose mode (see kernel log)\n"
         "\n"
     );
 }
@@ -75,9 +73,6 @@ static int sslpin_mt_parse(int c, char** argv, int invert, unsigned int* flags, 
             }
             *flags = 1;  // id set
             break;
-        case 'd':
-            mtruleinfo->flags |= SSLPIN_RULE_FLAG_DEBUG;
-            break;
         default:
             goto err;
     }
@@ -103,9 +98,6 @@ static void sslpin_mt_print(const void* entry, const struct xt_entry_match* matc
 
     printf(" sslpin:");
 
-    if (mtruleinfo->flags & SSLPIN_RULE_FLAG_DEBUG) {
-        printf(" debug");
-    }
     if (mtruleinfo->flags & SSLPIN_RULE_FLAG_INVERT) {
         printf(" !");
     }
@@ -117,9 +109,6 @@ static void sslpin_mt_print(const void* entry, const struct xt_entry_match* matc
 static void sslpin_mt_save(const void* entry, const struct xt_entry_match* match) {
     struct sslpin_mtruleinfo* mtruleinfo = (struct sslpin_mtruleinfo*)(match->data);
 
-    if (mtruleinfo->flags & SSLPIN_RULE_FLAG_DEBUG) {
-        printf(" --debug");
-    }
     if (mtruleinfo->flags & SSLPIN_RULE_FLAG_INVERT) {
         printf(" !");
     }

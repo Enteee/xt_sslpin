@@ -62,6 +62,7 @@ static int __init sslpin_mt_init(void) {
     int ret = 0;
 
     pr_info("xt_sslpin " XT_SSLPIN_VERSION " (SSL/TLS pinning)\n");
+    pr_debug("xt_sslpin: debug enabled\n");
 
     sslpin_hash = crypto_alloc_shash(XT_SSLPIN_HASH_ALGO, 0, CRYPTO_ALG_TYPE_SHASH);
     if (IS_ERR(sslpin_hash)) {
@@ -79,7 +80,7 @@ static int __init sslpin_mt_init(void) {
 
     ret = sslpin_cert_finger_print_init(sslpin_kobj);
     if (ret) {
-        pr_err("xt_sslpin: could not initialize cert finger print lists");
+        pr_err("xt_sslpin: could not initialize cert finger print lists\n");
         goto err_cert_finger_print;
     }
 
@@ -136,7 +137,6 @@ static void __exit sslpin_mt_exit(void) {
  * then sslpin_mt_destroy() will be called */
 static void sslpin_mt_destroy(const struct xt_mtdtor_param* par) {
     spin_lock_bh(&sslpin_mt_lock);
-    sslpin_mt_checked_after_destroy = false;
     spin_unlock_bh(&sslpin_mt_lock);
 }
 
@@ -149,18 +149,6 @@ static int sslpin_mt_check(const struct xt_mtchk_param* par) {
         pr_err("invalid finger print list id: %d\n", mtruleinfo->fpl_id);
         return EINVAL;
     }
-
-    /* update sslpin_mt_has_debug_rules */
-    spin_lock_bh(&sslpin_mt_lock);
-    if (likely(sslpin_mt_checked_after_destroy)) {
-        if (unlikely(sslpin_debug_enabled(mtruleinfo))) {
-            sslpin_mt_has_debug_rules = true;
-        }
-    } else {
-        sslpin_mt_has_debug_rules = mtruleinfo->flags & SSLPIN_RULE_FLAG_DEBUG;
-        sslpin_mt_checked_after_destroy = true;
-    }
-    spin_unlock_bh(&sslpin_mt_lock);
 
     return 0;
 }
@@ -215,7 +203,6 @@ void cert_finger_print_cb(const __u8* const val, void* data) {
  */
 static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
     const struct sslpin_mtruleinfo* const mtruleinfo = par->matchinfo;
-    const bool debug_enabled = sslpin_debug_enabled(mtruleinfo);
     const struct iphdr* ip;
     const struct tcphdr* tcp;
     struct sslpin_connstate* state;
@@ -229,9 +216,7 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
     /* check that conntrack flow binding is provided */
     if (unlikely(!skb->nfct)) {
         par->hotdrop = true;
-        if (unlikely(debug_enabled)) {
-            pr_err("xt_sslpin: no conntrack data (conntrack not enabled?) - dropping packet!\n");
-        }
+        pr_debug("xt_sslpin: no conntrack data (conntrack not enabled?) - dropping packet!\n");
         return false;
     }
 
@@ -249,9 +234,7 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
     if (unlikely(!state)) {
         spin_unlock_bh(&sslpin_mt_lock);
         par->hotdrop = true;
-        if (unlikely(debug_enabled)) {
-            pr_err("xt_sslpin: unable to allocate sslpin_connstate - dropping packet!\n");
-        }
+        pr_debug("xt_sslpin: unable to allocate sslpin_connstate - dropping packet!\n");
         return false;
     }
 
@@ -274,9 +257,7 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
     if (unlikely(!ip)) {
         spin_unlock_bh(&sslpin_mt_lock);
         par->hotdrop = true;
-        if (unlikely(debug_enabled)) {
-            pr_err("xt_sslpin: no IP header - dropping packet!\n");
-        }
+        pr_debug("xt_sslpin: no IP header - dropping packet!\n");
         return false;
     }
 
@@ -284,9 +265,7 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
     if (unlikely(ip->version != 4)) {
         spin_unlock_bh(&sslpin_mt_lock);
         par->hotdrop = true;
-        if (unlikely(debug_enabled)) {
-            pr_err("xt_sslpin: IPv6 not yet supported\n");
-        }
+        pr_debug("xt_sslpin: IPv6 not yet supported\n");
         return false;
     }
 
@@ -294,9 +273,7 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
     if (unlikely(ip->protocol != IPPROTO_TCP)) {
         spin_unlock_bh(&sslpin_mt_lock);
         par->hotdrop = true;
-        if (unlikely(debug_enabled)) {
-            pr_err("xt_sslpin: unknown IP protocol %d - dropping packet!\n", ip->protocol);
-        }
+        pr_debug("xt_sslpin: unknown IP protocol %d - dropping packet!\n", ip->protocol);
         return false;
     }
 
@@ -304,9 +281,7 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
     if (unlikely(is_ip_fragment(par->fragoff | ip->frag_off))) {
         spin_unlock_bh(&sslpin_mt_lock);
         par->hotdrop = true;
-        if (unlikely(debug_enabled)) {
-            pr_err("xt_sslpin: IP fragment seen (conntrack not enabled?) - dropping packet!\n");
-        }
+        pr_debug("xt_sslpin: IP fragment seen (conntrack not enabled?) - dropping packet!\n");
         return false;
     }
 
@@ -320,10 +295,8 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
         if (unlikely(data_len)) {
             spin_unlock_bh(&sslpin_mt_lock);
             par->hotdrop = true;
-            if (unlikely(debug_enabled)) {
-                pr_err("xt_sslpin: received SYN/ACK packet with data!? dropping packet"
-                       " (TCP Fast Open not current supported by xt_sslpin)\n");
-            }
+            pr_debug("xt_sslpin: received SYN/ACK packet with data!? dropping packet"
+                   " (TCP Fast Open not current supported by xt_sslpin)\n");
             return false;
         }
 
@@ -331,10 +304,8 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
             state->state = SSLPIN_CONNSTATE_INVALID;
             spin_unlock_bh(&sslpin_mt_lock);
             par->hotdrop = true;
-            if (unlikely(debug_enabled)) {
-                pr_err("xt_sslpin: received SYN packet (without ACK)"
-                       " - dropping packet and marking connection as invalid\n");
-            }
+            pr_debug("xt_sslpin: received SYN packet (without ACK)"
+                   " - dropping packet and marking connection as invalid\n");
             return false;
         }
 
@@ -345,10 +316,8 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
             }
             spin_unlock_bh(&sslpin_mt_lock);
             par->hotdrop = true;
-            if (unlikely(debug_enabled)) {
-                pr_err("xt_sslpin: received SYN/ACK for connection that has received data"
-                       " - dropping packet and marking connection as invalid\n");
-            }
+            pr_debug("xt_sslpin: received SYN/ACK for connection that has received data"
+                   " - dropping packet and marking connection as invalid\n");
             return false;
         }
 
@@ -369,10 +338,8 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
     if (unlikely(state->state < SSLPIN_CONNSTATE_GOT_SYNACK)) {
         state->state = SSLPIN_CONNSTATE_FINISHED;
         spin_unlock_bh(&sslpin_mt_lock);
-        if (unlikely(debug_enabled)) {
-            pr_err("xt_sslpin: SYN/ACK not seen for connection (already established when xt_sslpin was loaded)"
-                   " - ignoring connection\n");
-        }
+        pr_debug("xt_sslpin: SYN/ACK not seen for connection (already established when xt_sslpin was loaded)"
+               " - ignoring connection\n");
         return false;
     }
 
@@ -397,12 +364,10 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
 
         /* new packet - check TCP sequence number - drop out-of-order packets */
         if (unlikely(tcp_seq != state->last_seq + state->last_len)) {
-            if (unlikely(debug_enabled)) {
-                pr_err("xt_sslpin: out-of-order TCP segment (expecting seq 0x%08x, packet has 0x%08x)"
-                       " - dropping packet\n",
-                       state->last_seq + state->last_len,
-                       tcp_seq);
-            }
+            pr_debug("xt_sslpin: out-of-order TCP segment (expecting seq 0x%08x, packet has 0x%08x)"
+                   " - dropping packet\n",
+                   state->last_seq + state->last_len,
+                   tcp_seq);
             spin_unlock_bh(&sslpin_mt_lock);
             par->hotdrop = true;
             return false;
@@ -412,9 +377,7 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
         if (unlikely(data_len > 1 << 30)) {
             spin_unlock_bh(&sslpin_mt_lock);
             par->hotdrop = true;
-            if (unlikely(debug_enabled)) {
-                pr_err("xt_sslpin: data_len == %d - dropping packet!\n", data_len);
-            }
+            pr_debug("xt_sslpin: data_len == %d - dropping packet!\n", data_len);
             return false;
         }
 
@@ -436,14 +399,12 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
 
         /* allocate parser ctx for conn */
         if (unlikely(!state->parser_ctx)) {
-            if (unlikely(!sslpin_connstate_bind_parser(state, sslpin_hash, sslpin_mt_has_debug_rules))) {
+            if (unlikely(!sslpin_connstate_bind_parser(state, sslpin_hash))) {
                 state->state = SSLPIN_CONNSTATE_INVALID;
                 spin_unlock_bh(&sslpin_mt_lock);
                 par->hotdrop = true;
-                if (unlikely(debug_enabled)) {
-                    pr_err("xt_sslpin: unable to allocate parser context for connection"
-                           " - dropping packet and marking connection as invalid\n");
-                }
+                pr_debug("xt_sslpin: unable to allocate parser context for connection"
+                       " - dropping packet and marking connection as invalid\n");
                 return false;
             }
             /* register callback */
@@ -487,10 +448,8 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
             state->state = SSLPIN_CONNSTATE_INVALID;
             spin_unlock_bh(&sslpin_mt_lock);
             par->hotdrop = true;
-            if (unlikely(debug_enabled)) {
-                pr_warn("xt_sslpin: invalid SSL/TLS/X509 data received"
-                        " - dropping packet and marking connection as invalid\n");
-            }
+            pr_debug("xt_sslpin: invalid SSL/TLS/X509 data received"
+                    " - dropping packet and marking connection as invalid\n");
             return false;
         }
 
@@ -508,9 +467,7 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
             !(mtruleinfo->flags & SSLPIN_RULE_FLAG_INVERT)
         );
 
-    if (unlikely(debug_enabled)) {
-        pr_info("xt_sslpin: rule %smatched\n", matched ? "" : "not ");
-    }
+    pr_debug("xt_sslpin: rule %smatched\n", matched ? "" : "not ");
 
     spin_unlock_bh(&sslpin_mt_lock);
     return matched;
@@ -536,9 +493,7 @@ static int sslpin_conntrack_event(unsigned int events, struct nf_ct_event* item)
     }
 
     sslpin_connstate_remove(state);
-    if (unlikely(sslpin_mt_has_debug_rules)) {
-        sslpin_connstate_debug_count();
-    }
+    sslpin_connstate_debug_count();
 
     spin_unlock_bh(&sslpin_mt_lock);
     return NOTIFY_DONE;

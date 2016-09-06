@@ -3,7 +3,7 @@ _netfilter/xtables module: match SSL/TLS certificate finger prints_
 
 ## SYNOPSIS
 
-    iptables -I <chain> .. -m sslpin [!] --fpl <finger print list id> [--debug] ..
+    iptables -I <chain> .. -m sslpin [!] --fpl <finger print list id> ..
 
 ## DESCRIPTION
 
@@ -15,7 +15,7 @@ For an introduction to SSL/TLS certificate pinning refer to the [OWASP pinning c
     ```shell
     iptables -I INPUT -p tcp --sport 443 \
         -m conntrack --ctstate ESTABLISHED \
-        -m sslpin --debug --fpl 0 \
+        -m sslpin --fpl 0 \
         -j CONNMARK --set-mark 1
     ```
 
@@ -69,7 +69,7 @@ make
 sudo make install
 ```
 
-Verify install:
+Verify installation:
 
 ```shell
 iptables -m sslpin -h
@@ -77,44 +77,18 @@ iptables -m sslpin -h
 
 ### Uninstalling
 
-Clean source/build directory:
-
 ```shell
 make clean
-```
-
-Uninstall:
-
-```shell
 sudo make uninstall
 ```
 
 ## OPTIONS
 
-Options preceded by an exclamation mark negate the comparison: the rule will match if the presented SSL/TLS certificate fingerprint does NOT match the specified public key.
+Options preceded by an exclamation mark negate the comparison: the rule will match if the presented SSL/TLS certificate fingerprint is NOT found in the specified list.
 
 ### `[!] --fpl <list id>` 
 
-If a "Certificate" message is seen, match if the one of the certificates matches a finger print in the given list. (_The `--debug` option can be used to get the public key for a server._)
-
-### `--debug`
-
-Verbose logging.
-
-```
-kernel: [ 154.806189] xt_sslpin 1.0 (SSL/TLS pinning)
-kernel: [ 156.976209] xt_sslpin: 1 connection (0 actively monitored)
-kernel: [ 156.127355] xt_sslpin: 1 connection (1 actively monitored)
-kernel: [ 157.127367] xt_sslpin: sslparser: ServerHello handshake message (len = 85)
-kernel: [ 157.127370] xt_sslpin: sslparser: Certificate handshake message (len = 2193)
-kernel: [ 157.127373] xt_sslpin: sslparser: cn = "example.com"
-kernel: [ 157.127378] xt_sslpin: sslparser: pubkey_alg = { name:"rsa", oid_asn1_hex:[2a864886f...] }
-kernel: [ 157.127387] xt_sslpin: sslparser: pubkey = [00000000000000000000000000000000...]
-kernel: [ 159.129145] xt_sslpin: sslparser: ServerDone handshake message (len = 0)
-kernel: [ 159.285698] xt_sslpin: sslparser: ChangeCipherSpec record
-kernel: [ 159.285714] xt_sslpin: rule not matched (cn = "example.com")
-kernel: [ 159.344721] xt_sslpin: 1 connection (0 actively monitored)
-```
+If a "Certificate" message is seen, match if one of the certificates matches a finger print in the given list.
 
 ## LIST API
 
@@ -141,6 +115,28 @@ can still have non-linear memory layout; see skb_is_nonlinear().
 
 If SYN is received on a time-wait state conn/flow, conntrack will destroy the old cf_conn
 and create a new cf_conn. Thus, our per-conn state transitions are simply new->open->destroyed (no reopen).
+
+## DEBUG
+
+Compile the module in debug mode
+
+```shell
+sudo make debug install
+```
+
+and it will log connection information, finger prints and parsing information:
+
+```
+kernel: [353.333720] xt_sslpin 2.0 (SSL/TLS pinning)
+kernel: [353.333722] xt_sslpin: debug enabled
+kernel: [353.191650] xt_sslpin: new finger print (list = 0, fp = AD7CEA1CD3C13E1DE21C6ED5C16E4D156CE651E6, bucket = 44412)
+kernel: [353.191753] xt_sslpin: new finger print (list = 0, fp = 65548323AA33D1FE5A1FE1AF5EA35E4846AEF466, bucket = 28865)
+kernel: [353.191830] xt_sslpin: new finger print (list = 0, fp = 9DBFAD0F0EEDC153E1D51E56165ED165E16E165E, bucket = 40383)
+kernel: [353.332684] xt_sslpin: 1 connection (0 actively monitored)
+kernel: [353.332707] xt_sslpin: SYN/ACK not seen for connection (already established when xt_sslpin was loaded) - ignoring connection
+kernel: [353.575060] xt_sslpin: 2 connections (0 actively monitored)
+kernel: [353.575082] xt_sslpin: SYN/ACK not seen for connection (already established when xt_sslpin was loaded) - ignoring connection
+```
 
 ## TODO
 

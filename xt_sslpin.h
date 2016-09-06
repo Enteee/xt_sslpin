@@ -29,7 +29,6 @@
 
 /* xt_sslpin rule flags */
 typedef enum {
-    SSLPIN_RULE_FLAG_DEBUG        = 1 << 0,
     SSLPIN_RULE_FLAG_INVERT       = 1 << 1,
 } sslpin_rule_flags_t;
 
@@ -47,9 +46,5 @@ struct sslpin_mtruleinfo {
 
 #define SSLPIN_MTRULEINFO_KERN_SIZE      XT_ALIGN(sizeof(struct sslpin_mtruleinfo))
 #define SSLPIN_MTRULEINFO_USER_SIZE      offsetof(struct sslpin_mtruleinfo, kernpriv)
-
-static inline bool sslpin_debug_enabled(const struct sslpin_mtruleinfo* mtruleinfo) {
-    return mtruleinfo->flags & SSLPIN_RULE_FLAG_DEBUG;
-}
 
 #endif /* _LINUX_NETFILTER_XT_SSLPIN_H */

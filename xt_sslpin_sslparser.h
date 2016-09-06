@@ -42,7 +42,6 @@ typedef void (*sslparser_hash_cb)(const __u8* const val, void* data);
 struct sslparser_ctx {
     /* Parser state variables */
     __u8        state;
-    bool        debug : 1;
     __u8        tls_ver_minor : 4;
     bool        cert_msg_seen : 1;
     __u16       state_remain;
@@ -95,9 +94,7 @@ struct sslparser_ctx {
 #define l(x)        likely(x)
 
 #define invalid(fmt, ...)                                                                                           \
-    if (ul(state->debug)) {                                                                                         \
-        pr_err("xt_sslpin: sslparser: " fmt, ##__VA_ARGS__);                                                        \
-    }                                                                                                               \
+    pr_debug("xt_sslpin: sslparser: " fmt, ##__VA_ARGS__);                                                          \
     state->state = SSLPARSER_STATE_INVALID;                                                                         \
     return SSLPARSER_RES_INVALID;
 
@@ -110,9 +107,7 @@ struct sslparser_ctx {
     return SSLPARSER_RES_CONTINUE;
 
 #define debug(fmt, ...)                                                                                             \
-    if (ul(state->debug)) {                                                                                         \
-        pr_info("xt_sslpin: sslparser: " fmt, ##__VA_ARGS__);                                                       \
-    }
+    pr_debug("xt_sslpin: sslparser: " fmt, ##__VA_ARGS__);                                                          \
 
 #define go_state(new_state, label)                                                                                  \
     statev = new_state;                                                                                             \

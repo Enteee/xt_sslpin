@@ -55,7 +55,7 @@ static __u32                sslpin_parserctx_count            = 0;
 
 /* print n.o. tracked connections */
 static void sslpin_connstate_debug_count(void) {
-    pr_info("xt_sslpin: %d connection%s (%d actively monitored)\n", sslpin_connstate_count,
+    pr_debug("xt_sslpin: %d connection%s (%d actively monitored)\n", sslpin_connstate_count,
             (sslpin_connstate_count != 1) ? "s" : "",
             sslpin_parserctx_count);
 }
@@ -63,8 +63,7 @@ static void sslpin_connstate_debug_count(void) {
 
 /* create parser_ctx for conn */
 static struct sslparser_ctx* sslpin_connstate_bind_parser(struct sslpin_connstate* state,
-                                                          struct crypto_shash* const tfm,
-                                                          const bool enable_debug) {
+                                                          struct crypto_shash* const tfm) {
     if (unlikely(state->parser_ctx)) {
         return state->parser_ctx;
     }
@@ -73,8 +72,6 @@ static struct sslparser_ctx* sslpin_connstate_bind_parser(struct sslpin_connstat
     if (unlikely(!state->parser_ctx)) {
         return state->parser_ctx;
     }
-
-    state->parser_ctx->debug = enable_debug;
 
     state->parser_ctx->hash.desc = kmem_cache_zalloc(
                                        sslpin_parserctx_hash_desc_cache,
@@ -94,9 +91,8 @@ static struct sslparser_ctx* sslpin_connstate_bind_parser(struct sslpin_connstat
     }
 
     sslpin_parserctx_count++;
-    if (unlikely(sslpin_mt_has_debug_rules)) {
-        sslpin_connstate_debug_count();
-    }
+    sslpin_connstate_debug_count();
+
     return state->parser_ctx;
 }
 
@@ -113,9 +109,7 @@ static void sslpin_connstate_unbind_parser(struct sslpin_connstate* state) {
         state->parser_ctx = NULL;
 
         sslpin_parserctx_count--;
-        if (unlikely(sslpin_mt_has_debug_rules)) {
-            sslpin_connstate_debug_count();
-        }
+        sslpin_connstate_debug_count();
     }
 }
 
@@ -267,9 +261,7 @@ static struct sslpin_connstate* sslpin_connstate_find_or_init(struct nf_conn* nf
 
     sslpin_connstate_count++;
 
-    if (unlikely(sslpin_mt_has_debug_rules)) {
-        sslpin_connstate_debug_count();
-    }
+    sslpin_connstate_debug_count();
 
     return state;
 }
