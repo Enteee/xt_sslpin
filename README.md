@@ -103,7 +103,9 @@ The list API is exposed under: `/sys/kernel/xt_sslpin/`.
 ## IMPLEMENTATION NOTES
 
 Per connection, the incoming handshake data is parsed once across all -m sslpin iptables rules;
-upon receiving the SSL/TLS handshake ChangeCipherSpec message, the parsed certificates are checked by all rules.
+upon receiving the SSL/TLS handshake ServerCertificate message, the parsed certificates are checked by all rules.
+
+![xt_sslpin intercepted SSL/TLS handshake](/doc/handshake_xt_sslpin.png)
 
 After this, the connection is marked as "finished", and xt_sslpin will not do any further checking.
 (Re-handshaking will not be checked in order to incur minimal overhead, and as the server has already proved
