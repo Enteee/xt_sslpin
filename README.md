@@ -111,7 +111,7 @@ After this, the connection is marked as "finished", and xt_sslpin will not do an
 (Re-handshaking will not be checked in order to incur minimal overhead, and as the server has already proved
 its identity).
 
-Up until the ChangeCipherSpec message is received, xt_sslpin will drop out-of-order TCP segments to
+Up until the ServerCertificate message is received, xt_sslpin will drop out-of-order TCP segments to
 parse the data linearly without buffering. Conntrack takes care of IP fragment reassembly up-front, but packets
 can still have non-linear memory layout; see skb_is_nonlinear().
 
@@ -142,7 +142,6 @@ kernel: [353.575082] xt_sslpin: SYN/ACK not seen for connection (already establi
 
 ## TODO
 
-* ECParameters/namedCurve pinning in addition to current alg+pubkey pinning
 * Optional buffering for reordered TCP segments during handshake (no RTT penalty / overhead)
 * TCP Fast Open (TFO) support
 * Restrict TCP Options / TCP stack passthrough
