@@ -120,7 +120,7 @@ and create a new cf_conn. Thus, our per-conn state transitions are simply new->o
 
 ## DEBUG
 
-Compile the module in debug mode
+Compile and install the module in debug mode
 
 ```shell
 sudo make debug install
