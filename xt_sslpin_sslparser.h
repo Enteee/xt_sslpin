@@ -60,8 +60,8 @@ struct sslparser_ctx {
 
     /* Callbacks */
     struct {
-        sslparser_hash_cb     cert_finger_print;
-        void*                 cert_finger_print_data;
+        sslparser_hash_cb     cert_fingerprint;
+        void*                 cert_fingerprint_data;
 
 #define SSLPARSER_CTX_REGISTER_CALLBACK(ctx, name, callback, data)                \
     ctx->cb.name = callback;                                                      \
@@ -302,9 +302,9 @@ state40_parse_certificate_message:
             state->record_remain = state_remain() - state->msg_remain - 1;
             bind_state_remain(state->msg_remain + 1);
 
-            step_state_to(50, state50_finger_print_certificate);
+            step_state_to(50, state50_fingerprint_certificate);
 
-state50_finger_print_certificate:
+state50_fingerprint_certificate:
         /* parse certificate length (3 bytes) */
         case 50:
             state->cert_remain = *data << 16;
@@ -344,15 +344,15 @@ state50_finger_print_certificate:
             }
 
             // callback
-            if (state->cb.cert_finger_print) {
-                state->cb.cert_finger_print(state->hash.val, state->cb.cert_finger_print_data);
+            if (state->cb.cert_fingerprint) {
+                state->cb.cert_fingerprint(state->hash.val, state->cb.cert_fingerprint_data);
             }
 
             data += state->cert_remain - 1;
             if (state_remain() != 1) {
                 // more certificates: loop
                 debug("more certificates\n");
-                step_state_to(50, state50_finger_print_certificate);
+                step_state_to(50, state50_fingerprint_certificate);
             }
 
             // message end: finish parsing...

@@ -1,13 +1,13 @@
 # xt_sslpin 
-_netfilter/xtables module: match SSL/TLS certificate finger prints_
+_netfilter/xtables module: match SSL/TLS certificate fingerprints_
 
 ## SYNOPSIS
 
-    iptables -I <chain> .. -m sslpin [!] --fpl <finger print list id> ..
+    iptables -I <chain> .. -m sslpin [!] --fpl <fingerprint list id> ..
 
 ## DESCRIPTION
 
-For an introduction to SSL/TLS certificate pinning refer to the [OWASP pinning cheat sheet](https://www.owasp.org/index.php/Pinning_Cheat_Sheet). xt_sslpin lets you do certificate pinning at the netfilter level. xt_sslpin will match certificate finger prints in SSL/TLS connections (with minimal performance impact). Applications are expected to do further certificate chain validation and signature checks (i.e. normal SSL/TLS processing).
+For an introduction to SSL/TLS certificate pinning refer to the [OWASP pinning cheat sheet](https://www.owasp.org/index.php/Pinning_Cheat_Sheet). xt_sslpin lets you do certificate pinning at the netfilter level. xt_sslpin will match certificate fingerprints in SSL/TLS connections (with minimal performance impact). Applications are expected to do further certificate chain validation and signature checks (i.e. normal SSL/TLS processing).
 
 ## EXAMPLE
 
@@ -88,7 +88,7 @@ Options preceded by an exclamation mark negate the comparison: the rule will mat
 
 ### `[!] --fpl <list id>` 
 
-If a "Certificate" message is seen, match if one of the certificates matches a finger print in the given list.
+If a "Certificate" message is seen, match if one of the certificates matches a fingerprint in the given list.
 
 ## LIST API
 
@@ -96,8 +96,8 @@ The list API is exposed under: `/sys/kernel/xt_sslpin/`.
 
 | Operation | Command |
 | --------- | ------- |
-| ADD       | `echo finger-print-sha1 > /sys/kernel/xt_sslpin/<list id>_add` |
-| REMOVE    | `echo finger-print-sha1 > /sys/kernel/xt_sslpin/<list id>_rm`  |
+| ADD       | `echo fingerprint-sha1 > /sys/kernel/xt_sslpin/<list id>_add` |
+| REMOVE    | `echo fingerprint-sha1 > /sys/kernel/xt_sslpin/<list id>_rm`  |
 | LIST      | `ls /sys/kernel/xt_sslpin/<list id>` |
 
 ## IMPLEMENTATION NOTES
@@ -126,14 +126,14 @@ Compile and install the module in debug mode
 sudo make debug install
 ```
 
-and it will log connection information, finger prints and parsing information:
+and it will log connection information, fingerprints and parsing information:
 
 ```
 kernel: [353.333720] xt_sslpin 2.0 (SSL/TLS pinning)
 kernel: [353.333722] xt_sslpin: debug enabled
-kernel: [353.191650] xt_sslpin: new finger print (list = 0, fp = AD7CEA1CD3C13E1DE21C6ED5C16E4D156CE651E6, bucket = 44412)
-kernel: [353.191753] xt_sslpin: new finger print (list = 0, fp = 65548323AA33D1FE5A1FE1AF5EA35E4846AEF466, bucket = 28865)
-kernel: [353.191830] xt_sslpin: new finger print (list = 0, fp = 9DBFAD0F0EEDC153E1D51E56165ED165E16E165E, bucket = 40383)
+kernel: [353.191650] xt_sslpin: new fingerprint (list = 0, fp = AD7CEA1CD3C13E1DE21C6ED5C16E4D156CE651E6, bucket = 44412)
+kernel: [353.191753] xt_sslpin: new fingerprint (list = 0, fp = 65548323AA33D1FE5A1FE1AF5EA35E4846AEF466, bucket = 28865)
+kernel: [353.191830] xt_sslpin: new fingerprint (list = 0, fp = 9DBFAD0F0EEDC153E1D51E56165ED165E16E165E, bucket = 40383)
 kernel: [353.332684] xt_sslpin: 1 connection (0 actively monitored)
 kernel: [353.332707] xt_sslpin: SYN/ACK not seen for connection (already established when xt_sslpin was loaded) - ignoring connection
 kernel: [353.575060] xt_sslpin: 2 connections (0 actively monitored)

@@ -21,7 +21,7 @@
 #define STR(x) STR_HELPER(x)
 
 #define XT_SSLPIN_VERSION "2.0"
-#define XT_SSLPIN_CERT_FINGER_PRINTS_HASHTABLE_SIZE 11 /* half a page */
+#define XT_SSLPIN_CERT_FINGERPRINTS_HASHTABLE_SIZE 11 /* half a page */
 
 #define XT_SSLPIN_HASH_ALGO "sha1"
 

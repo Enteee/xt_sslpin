@@ -39,7 +39,7 @@ struct sslpin_connstate {
     __u32                       last_len;
     __u16                       last_ipid;
     struct sslparser_ctx*        parser_ctx;
-    int                         cert_finger_print_mask;
+    int                         cert_fingerprint_mask;
 };
 
 

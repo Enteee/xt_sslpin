@@ -41,10 +41,10 @@
 #include "xt_globals.h"
 #include "xt_sslpin_connstate.h"
 #include "xt_sslpin_sslparser.h"
-#include "xt_cert_finger_print.h"
+#include "xt_cert_fingerprint.h"
 
 MODULE_AUTHOR("Enteee (duckpond.ch) ");
-MODULE_DESCRIPTION("xtables: match SSL/TLS certificate finger prints");
+MODULE_DESCRIPTION("xtables: match SSL/TLS certificate fingerprints");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("ipt_sslpin");
 
@@ -78,10 +78,10 @@ static int __init sslpin_mt_init(void) {
         goto err_create_kobj;
     }
 
-    ret = sslpin_cert_finger_print_init(sslpin_kobj);
+    ret = sslpin_cert_fingerprint_init(sslpin_kobj);
     if (ret) {
-        pr_err("xt_sslpin: could not initialize cert finger print lists\n");
-        goto err_cert_finger_print;
+        pr_err("xt_sslpin: could not initialize cert fingerprint lists\n");
+        goto err_cert_fingerprint;
     }
 
     ret = sslpin_connstate_cache_init(sslpin_hash);
@@ -109,8 +109,8 @@ err_xt_register_match:
 err_conntrack_register_notifier:
     sslpin_connstate_cache_destroy();
 err_connstate_cache_init:
-    sslpin_cert_finger_print_destroy();
-err_cert_finger_print:
+    sslpin_cert_fingerprint_destroy();
+err_cert_fingerprint:
     kobject_put(sslpin_kobj);
 err_create_kobj:
     crypto_free_shash(sslpin_hash);
@@ -124,7 +124,7 @@ static void __exit sslpin_mt_exit(void) {
     xt_unregister_match(&sslpin_mt_reg);
     nf_conntrack_unregister_notifier(&init_net, &sslpin_conntrack_notifier);
     sslpin_connstate_cache_destroy();
-    sslpin_cert_finger_print_destroy();
+    sslpin_cert_fingerprint_destroy();
     kobject_put(sslpin_kobj);
     crypto_free_shash(sslpin_hash);
 
@@ -145,29 +145,29 @@ static void sslpin_mt_destroy(const struct xt_mtdtor_param* par) {
 static int sslpin_mt_check(const struct xt_mtchk_param* par) {
     struct sslpin_mtruleinfo* mtruleinfo = par->matchinfo;
     /* sanity check input options */
-    if (mtruleinfo->fpl_id < 0 || mtruleinfo->fpl_id > SSLPIN_FINGER_PRINT_LIST_SIZE) {
-        pr_err("invalid finger print list id: %d\n", mtruleinfo->fpl_id);
+    if (mtruleinfo->fpl_id < 0 || mtruleinfo->fpl_id > SSLPIN_FINGERPRINT_LIST_SIZE) {
+        pr_err("invalid fingerprint list id: %d\n", mtruleinfo->fpl_id);
         return EINVAL;
     }
 
     return 0;
 }
 
-void cert_finger_print_cb(const __u8* const val, void* data) {
-    finger_print* fp = (finger_print*)val;
+void cert_fingerprint_cb(const __u8* const val, void* data) {
+    fingerprint* fp = (fingerprint*)val;
     struct sslpin_connstate* state = (struct sslpin_connstate*) data;
-    struct cert_finger_print* cfp = sslpin_get_cert_finger_print(fp);
+    struct cert_fingerprint* cfp = sslpin_get_cert_fingerprint(fp);
 
     if (cfp) {
-        pr_debug("xt_sslpin: cert finger print found (mask = "SSLPIN_CERT_FINGER_PRINT_MASK_FMT", fp = "SSLPIN_FINGER_PRINT_PRINT_FMT")\n",
-                 SSLPIN_CERT_FINGER_PRINT_MASK_PRINT(cfp->mask),
-                 SSLPIN_FINGER_PRINT_PRINT(cfp->fp)
+        pr_debug("xt_sslpin: cert fingerprint found (mask = "SSLPIN_CERT_FINGERPRINT_MASK_FMT", fp = "SSLPIN_FINGERPRINT_PRINT_FMT")\n",
+                 SSLPIN_CERT_FINGERPRINT_MASK_PRINT(cfp->mask),
+                 SSLPIN_FINGERPRINT_PRINT(cfp->fp)
                 );
 
-        state->cert_finger_print_mask |= cfp->mask;
+        state->cert_fingerprint_mask |= cfp->mask;
     } else {
-        pr_debug("xt_sslpin: cert finger print not found (fp = "SSLPIN_FINGER_PRINT_PRINT_FMT")\n",
-                 SSLPIN_FINGER_PRINT_PRINT(*fp)
+        pr_debug("xt_sslpin: cert fingerprint not found (fp = "SSLPIN_FINGERPRINT_PRINT_FMT")\n",
+                 SSLPIN_FINGERPRINT_PRINT(*fp)
                 );
 
     }
@@ -408,7 +408,7 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
                 return false;
             }
             /* register callback */
-            SSLPARSER_CTX_REGISTER_CALLBACK(state->parser_ctx, cert_finger_print, cert_finger_print_cb, state);
+            SSLPARSER_CTX_REGISTER_CALLBACK(state->parser_ctx, cert_fingerprint, cert_fingerprint_cb, state);
         }
 
         /* non-paged data */
@@ -462,7 +462,7 @@ static bool sslpin_mt(const struct sk_buff* skb, struct xt_action_param* par) {
     matched =
         likely(state->parser_ctx)
         && (
-            !(state->cert_finger_print_mask & 1 << mtruleinfo->fpl_id)
+            !(state->cert_fingerprint_mask & 1 << mtruleinfo->fpl_id)
             != // XOR
             !(mtruleinfo->flags & SSLPIN_RULE_FLAG_INVERT)
         );
